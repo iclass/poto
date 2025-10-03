@@ -1,0 +1,55 @@
+{
+  "compilerOptions": {
+		"noUnusedLocals": false,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "allowJs": true,
+    "checkJs": true,
+    "baseUrl": ".",
+    "module": "ESNext",
+    "target": "ES2022",
+    "lib": [
+      "DOM",
+      "ESNext"
+    ],
+    "strict": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "jsx": "preserve",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "strictNullChecks": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    // "noUnusedParameters": false,
+    "importHelpers": true,
+    "sourceMap": true,
+    "paths": {
+      // "@/*": [
+      //   "./src/*"
+      // ]
+    },
+    "noEmit": false,
+    "outDir": "./dist",
+    "declaration": true,
+    "declarationMap": true,
+    "rootDir": "./src"
+  },
+  "include": [
+    "src/**/*"
+, "tests/unit/server/GeneratorModuleExample.ts"  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "service",
+    "demo-iframe-rpc/**/*",
+    "example-usage/**/*",
+    "genericChatCli/**/*",
+    "tests/**/*",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/*.test.js",
+    "**/*.spec.js"
+  ]
+}

@@ -1,0 +1,84 @@
+{
+	"name": "poto",
+	"type": "module",
+	"version": "1.2.1",
+	"private": false,
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist/**/*",
+		"src/**/*",
+		"README.md",
+		"package.json"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/iclass/poto.git"
+	},
+	"homepage": "https://github.com/iclass/poto#readme",
+	"bugs": {
+		"url": "https://github.com/iclass/poto/issues"
+	},
+	"description": "ChatGPT Web",
+	"keywords": [
+		"Poto",
+		"web RPC",
+		"typescript"
+	],
+	"source": "./src/index.ts",
+	"sourceRoot": "./src",
+	"scripts": {
+		"quickchat": "bun genericChatCli/client/ChatClient.ts",
+		"chat-server": "bun --hot genericChatCli/start-server.ts",
+		"chat-client": "bun genericChatCli/start-client.ts",
+		"build": "bun run build:clean && bun run build:compile",
+		"build:clean": "rimraf dist",
+		"build:compile": "bun run tsc",
+		"tsc": "tsc --noEmit false --outDir dist --declaration --declarationMap",
+		"test": "bun test --randomize",
+		"test:type-check": "tsc --project tsconfig.test.json --noEmit",
+		"prepublishOnly": "bun run build",
+		"version": "./scripts/version.sh",
+		"version:patch": "./scripts/version.sh patch",
+		"version:minor": "./scripts/version.sh minor",
+		"version:major": "./scripts/version.sh major",
+		"release": "./scripts/create-release.sh",
+		"release:patch": "bun run version:patch && git add package.json && git commit -m 'Bump version to $(node -p \"require('./package.json').version\")' && bun run release",
+		"release:minor": "bun run version:minor && git add package.json && git commit -m 'Bump version to $(node -p \"require('./package.json').version\")' && bun run release",
+		"release:major": "bun run version:major && git add package.json && git commit -m 'Bump version to $(node -p \"require('./package.json').version\")' && bun run release",
+		"release:check": "git status --porcelain | wc -l | xargs -I {} sh -c 'if [ {} -ne 0 ]; then echo \"❌ Working directory not clean. Please commit changes first.\"; exit 1; else echo \"✅ Working directory clean, ready for release\"; fi'"
+	},
+	"dependencies": {
+		"dotenv": "^17.2.0",
+		"js-base64": "^3.7.7",
+		"js-yaml": "^4.1.0",
+		"jsonrepair": "^3.13.0",
+		"jsonwebtoken": "^9.0.2",
+		"markdown-it": "^14.1.0",
+		"mime": "^4.0.7",
+		"reflect-metadata": "^0.2.2"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.2.18",
+		"@types/find-config": "^1.0.4",
+		"@types/js-yaml": "^4.0.9",
+		"@types/jsdom": "^27.0.0",
+		"@types/jsonwebtoken": "^9.0.10",
+		"@types/markdown-it": "^14.1.2",
+		"@types/markdown-it-link-attributes": "^3.0.5",
+		"cheerio": "^1.1.2",
+		"concurrently": "^9.2.0",
+		"domhandler": "^5.0.3",
+		"eslint": "^9.30.0",
+		"find-config": "^1.0.0",
+		"jsdom": "^27.0.0",
+		"rimraf": "^6.0.1",
+		"tslib": "^2.8.1",
+		"typescript": "^5.9.2"
+	},
+	"lint-staged": {
+		"*.{ts,tsx,vue,js}": [
+			"pnpm lint:fix"
+		]
+	}
+}

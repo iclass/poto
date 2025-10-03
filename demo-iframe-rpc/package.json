@@ -1,0 +1,27 @@
+{
+  "name": "iframe-rpc-demo",
+  "version": "1.0.0",
+  "description": "Minimal demo of iframe RPC system with parent window and HTTP server communication",
+  "main": "demo-server.ts",
+  "scripts": {
+    "start": "bun run demo-server.ts",
+    "dev": "bun --watch demo-server.ts",
+    "build": "bun build demo-server.ts --outdir dist",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": [
+    "iframe",
+    "rpc",
+    "typescript",
+    "bun",
+    "demo"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "bun": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.18"
+  }
+} 

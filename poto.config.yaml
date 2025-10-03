@@ -1,0 +1,151 @@
+# Poto Application Configuration
+# This file contains all configuration for the Poto system
+
+# LLM Configuration
+llm:
+  default:
+    model: "gpt-4"
+    apiKey: "${OPENAI_API_KEY}"
+    endpoint: "https://api.openai.com/v1/chat/completions"
+    maxTokens: 4000
+    temperature: 0.7
+  
+  providers:
+    openai:
+      model: "gpt-4"
+      apiKey: "${OPENAI_API_KEY}"
+      endpoint: "https://api.openai.com/v1/chat/completions"
+    
+    anthropic:
+      model: "claude-3-sonnet-20240229"
+      apiKey: "${ANTHROPIC_API_KEY}"
+      endpoint: "https://api.anthropic.com/v1/messages"
+    
+    local:
+      model: "llama-3.1-8b"
+      apiKey: "local"
+      endpoint: "http://localhost:11434/v1/chat/completions"
+
+# Dialogue Journal Configuration (FileSystem by default)
+dialogueJournal:
+  backend: "filesystem"  # memory, filesystem, redis
+  
+  # File System Configuration
+  filesystem:
+    root: "./data"  # Local development path (users/.../dialogs/... will be created under this)
+    maxConversationLength: 1000
+    maxConversationsPerUser: 50
+    archiveThreshold: 100
+    retentionDays: 365
+    lockTimeoutMs: 5000
+    serverId: "${SERVER_ID:-server-001}"
+  
+  # Memory Configuration (for development)
+  memory:
+    maxConversationLength: 100
+    maxConversationsPerUser: 10
+    maxConversationAgeHours: 24
+    maxInactiveUserHours: 72
+  
+  # Redis Configuration
+  redis:
+    url: "${REDIS_URL:-redis://localhost:6379}"
+    db: 0
+    ttlSeconds: 86400
+    keyPrefix: "poto:dialogue:"
+  
+  # Cleanup Configuration
+  cleanup:
+    intervalHours: 24
+    maxAgeHours: 168
+    maxInactiveHours: 720
+    dryRun: false
+
+# Server Configuration
+server:
+  host: "${HOST:-localhost}"
+  port: "${PORT:-3000}"
+  cors:
+    enabled: true
+    origins: ["http://localhost:3000", "http://localhost:5173"]
+  
+  # Session Configuration
+  session:
+    secret: "${SESSION_SECRET:-your-secret-key}"
+    maxAge: 86400000  # 24 hours
+    secure: false
+    httpOnly: true
+
+# Logging Configuration
+logging:
+  level: "${LOG_LEVEL:-info}"  # debug, info, warn, error
+  format: "json"  # json, pretty
+  destinations:
+    - console
+    - file: "./logs/poto.log"
+  
+  # Structured logging
+  fields:
+    service: "poto"
+    version: "${APP_VERSION:-1.0.0}"
+
+# Database Configuration (if needed)
+database:
+  type: "sqlite"  # sqlite, postgres, mysql
+  url: "${DATABASE_URL:-./poto.db}"
+  
+  # Connection pool
+  pool:
+    min: 2
+    max: 10
+    idleTimeout: 30000
+
+# Feature Flags
+features:
+  dialogueJournal:
+    enabled: true
+    archival: true
+    compression: true
+  
+  llm:
+    streaming: true
+    retries: 3
+    timeout: 30000
+  
+  server:
+    hotReload: true
+    metrics: true
+    healthChecks: true
+
+# Environment-specific overrides
+environments:
+  development:
+    llm:
+      default:
+        model: "gpt-3.5-turbo"
+        temperature: 0.9
+    
+    dialogueJournal:
+      filesystem:
+        root: "./data"
+        retentionDays: 7
+    
+    logging:
+      level: "debug"
+      format: "pretty"
+  
+  production:
+    server:
+      cors:
+        origins: ["https://yourdomain.com"]
+    
+    dialogueJournal:
+      filesystem:
+        root: "/var/lib/poto"
+        retentionDays: 365
+    
+    logging:
+      level: "info"
+      destinations:
+        - console
+        - file: "/var/log/poto/app.log"

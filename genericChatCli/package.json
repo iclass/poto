@@ -1,0 +1,28 @@
+{
+  "name": "generic-chat-cli",
+  "version": "1.0.0",
+  "description": "A generic streaming chat CLI using PotoClient/PotoServer and LLM",
+  "type": "module",
+  "scripts": {
+    "start": "bun client/ChatClient.ts",
+    "server": "bun start-server.ts",
+    "client": "bun client/ChatClient.ts",
+    "dev": "concurrently \"bun server\" \"bun client\""
+  },
+  "dependencies": {
+    "bun": "latest"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  },
+  "keywords": [
+    "chat",
+    "cli",
+    "streaming",
+    "llm",
+    "poto",
+    "typescript"
+  ],
+  "author": "Generic Chat CLI",
+  "license": "MIT"
+}

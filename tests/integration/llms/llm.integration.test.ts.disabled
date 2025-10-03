@@ -1,0 +1,259 @@
+// Loads environment variables from .env for local integration testing
+import 'dotenv/config';
+import { describe, it, expect } from 'bun:test';
+import { LLM, StreamingChunk } from '../../../src/llms/llm';
+
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'chatgpt-4o-latest';
+const OPENAI_ENDPOINT = process.env.OPENAI_ENDPOINT || 'https://api.openai.com/v1/chat/completions';
+
+describe('LLM Integration (OpenAI API)', () => {
+	if (!OPENAI_API_KEY) {
+		it.skip('skipped because OPENAI_API_KEY is not set', () => { });
+		return;
+	}
+
+	it('should get a valid response from OpenAI API', async () => {
+		const llm = new LLM(OPENAI_MODEL, OPENAI_API_KEY, OPENAI_ENDPOINT);
+		llm.responseFormat = '';
+		llm.system('You are a helpful assistant.');
+		llm.user('hello, how are you?');
+
+		const res = await llm.requestCompletion_();
+		const content = res.choices[0].message.content;
+		expect(content.length).toBeGreaterThan(0);
+		expect(typeof content).toBe('string');
+	});
+
+	it('should get a valid JSON response from OpenAI API (responseFormat=json_object)', async () => {
+		const llm = new LLM(OPENAI_MODEL, OPENAI_API_KEY, OPENAI_ENDPOINT);
+		llm.responseFormat = 'json_object';
+		llm.system('You are a helpful assistant. Reply with a JSON object with a "greeting" field.');
+		llm.user('Say hello in JSON.');
+
+		const res = await llm.requestCompletion_();
+		const content = res.choices[0].message.content;
+		let parsed;
+		try {
+			parsed = JSON.parse(content);
+		} catch (e) {
+			throw new Error('Response is not valid JSON: ' + content);
+		}
+		expect(typeof parsed).toBe('object');
+		expect(parsed).toHaveProperty('greeting');
+		expect(typeof parsed.greeting).toBe('string');
+		expect(parsed.greeting.length).toBeGreaterThan(0);
+	});
+
+	describe('Streaming Integration Tests', () => {
+		it('should stream completion chunks with full metadata', async () => {
+			const llm = new LLM(OPENAI_MODEL, OPENAI_API_KEY, OPENAI_ENDPOINT);
+			llm.responseFormat = '';
+			llm.system('You are a helpful assistant.');
+			llm.user('Tell me a short story about a cat.');
+
+			const stream = await llm.requestCompletionStream_();
+			const reader = stream.getReader();
+			const chunks: StreamingChunk[] = [];
+			let fullContent = '';
+
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+
+					expect(value).toBeInstanceOf(StreamingChunk);
+					expect(value.id).toBeDefined();
+					expect(value.object).toBe('chat.completion.chunk');
+					expect(value.model).toContain(OPENAI_MODEL);
+					expect(value.choices).toBeDefined();
+					expect(value.choices.length).toBeGreaterThan(0);
+
+					chunks.push(value);
+					fullContent += value.getContent();
+
+					// Check if this is the final chunk
+					if (value.isDone()) {
+						expect(value.getFinishReason()).toBe('stop');
+						break;
+					}
+				}
+			} finally {
+				reader.releaseLock();
+			}
+
+			expect(chunks.length).toBeGreaterThan(0);
+			expect(fullContent.length).toBeGreaterThan(0);
+			expect(fullContent.toLowerCase()).toContain('cat');
+		});
+
+		it('should stream text content only', async () => {
+			const llm = new LLM(OPENAI_MODEL, OPENAI_API_KEY, OPENAI_ENDPOINT);
+			llm.responseFormat = '';
+			llm.system('You are a helpful assistant.');
+			llm.user('Write a haiku about programming.');
+
+			const textStream = await llm.requestCompletionStreamText_();
+			const reader = textStream.getReader();
+			const textChunks: string[] = [];
+			let fullText = '';
+
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+
+					expect(typeof value).toBe('string');
+					textChunks.push(value);
+					fullText += value;
+				}
+			} finally {
+				reader.releaseLock();
+			}
+
+			expect(textChunks.length).toBeGreaterThan(0);
+			expect(fullText.length).toBeGreaterThan(0);
+			// Haiku should have some structure (though we can't guarantee exact format)
+			expect(fullText.split('\n').length).toBeGreaterThanOrEqual(2);
+		});
+
+		it('should handle streaming with max tokens limit', async () => {
+			const llm = new LLM(OPENAI_MODEL, OPENAI_API_KEY, OPENAI_ENDPOINT);
+			llm.responseFormat = '';
+			llm.system('You are a helpful assistant.');
+			llm.user('Write a very long story.');
+
+			const stream = await llm.requestCompletionStream_(50); // Very short limit
+			const reader = stream.getReader();
+			const chunks: StreamingChunk[] = [];
+
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+
+					chunks.push(value);
+					if (value.isDone()) {
+						// Should finish due to length limit
+						expect(['length', 'stop']).toContain(value.getFinishReason());
+						break;
+					}
+				}
+			} finally {
+				reader.releaseLock();
+			}
+
+			expect(chunks.length).toBeGreaterThan(0);
+		});
+
+		it('should handle streaming with JSON response format', async () => {
+			const llm = new LLM(OPENAI_MODEL, OPENAI_API_KEY, OPENAI_ENDPOINT);
+			llm.responseFormat = 'json_object';
+			llm.system('You are a helpful assistant. Reply with a JSON object containing a "message" field and an "answer" field.');
+			llm.user('What is the capital of France? Reply in JSON format with both a message and the answer.');
+
+			const stream = await llm.requestCompletionStream_();
+			const reader = stream.getReader();
+			let fullContent = '';
+
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+
+					fullContent += value.getContent();
+					if (value.isDone()) break;
+				}
+			} finally {
+				reader.releaseLock();
+			}
+
+			expect(fullContent.length).toBeGreaterThan(0);
+			
+			// Try to parse as JSON
+			let parsed;
+			try {
+				parsed = JSON.parse(fullContent);
+				expect(parsed).toHaveProperty('message');
+				expect(typeof parsed.message).toBe('string');
+				expect(parsed.message.length).toBeGreaterThan(0);
+				expect(parsed).toHaveProperty('answer');
+				expect(typeof parsed.answer).toBe('string');
+				expect(parsed.answer.length).toBeGreaterThan(0);
+			} catch (e) {
+				throw new Error('Streaming JSON response is not valid JSON: ' + fullContent);
+			}
+			
+			expect(typeof parsed).toBe('object');
+			expect(parsed).toHaveProperty('message');
+			expect(typeof parsed.message).toBe('string');
+			expect(parsed).toHaveProperty('answer');
+			expect(typeof parsed.answer).toBe('string');
+			// Verify the answer contains "Paris" (the capital of France)
+			expect(parsed.answer.toLowerCase()).toContain('paris');
+		});
+
+		it('should handle streaming error gracefully', async () => {
+			const llm = new LLM(OPENAI_MODEL, 'invalid-api-key', OPENAI_ENDPOINT);
+			llm.system('You are a helpful assistant.');
+			llm.user('Hello');
+
+			// The error should be thrown when calling requestCompletionStream_
+			await expect(llm.requestCompletionStream_()).rejects.toThrow();
+		});
+
+		it('should stream with debug mode enabled', async () => {
+			const llm = new LLM(OPENAI_MODEL, OPENAI_API_KEY, OPENAI_ENDPOINT);
+			llm.responseFormat = '';
+			llm.system('You are a helpful assistant.');
+			llm.user('Say hello.');
+
+			const stream = await llm.requestCompletionStream_(1000, true); // debug = true
+			const reader = stream.getReader();
+			let chunkCount = 0;
+
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+
+					chunkCount++;
+					expect(value).toBeInstanceOf(StreamingChunk);
+					
+					if (value.isDone()) break;
+				}
+			} finally {
+				reader.releaseLock();
+			}
+
+			expect(chunkCount).toBeGreaterThan(0);
+		});
+
+		it('should handle empty response gracefully', async () => {
+			const llm = new LLM(OPENAI_MODEL, OPENAI_API_KEY, OPENAI_ENDPOINT);
+			llm.responseFormat = '';
+			llm.system('You are a helpful assistant.');
+			llm.user('Respond with just a period.');
+
+			const stream = await llm.requestCompletionStream_();
+			const reader = stream.getReader();
+			const chunks: StreamingChunk[] = [];
+
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+
+					chunks.push(value);
+					if (value.isDone()) break;
+				}
+			} finally {
+				reader.releaseLock();
+			}
+
+			expect(chunks.length).toBeGreaterThan(0);
+			// Even a short response should have at least one chunk
+			expect(chunks[chunks.length - 1].isDone()).toBe(true);
+		});
+	});
+}); 

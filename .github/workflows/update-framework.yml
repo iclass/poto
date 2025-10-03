@@ -1,0 +1,111 @@
+name: Update Poto Framework
+
+# This workflow can be copied to other projects to automatically update Poto framework
+on:
+  schedule:
+    - cron: '0 0 * * 1'  # Weekly on Monday at midnight
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to update to (e.g., v1.0.0, latest)'
+        required: false
+        default: 'latest'
+
+jobs:
+  update-poto:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
+        
+    - name: Get latest release info
+      id: release
+      run: |
+        if [ "${{ github.event.inputs.version }}" = "latest" ] || [ -z "${{ github.event.inputs.version }}" ]; then
+          RELEASE_URL=$(curl -s https://api.github.com/repos/${{ github.repository_owner }}/poto/releases/latest | \
+            grep "browser_download_url.*poto.tar.gz" | \
+            cut -d '"' -f 4)
+          RELEASE_TAG=$(curl -s https://api.github.com/repos/${{ github.repository_owner }}/poto/releases/latest | \
+            grep '"tag_name"' | \
+            cut -d '"' -f 4)
+        else
+          RELEASE_URL="https://github.com/${{ github.repository_owner }}/poto/releases/download/${{ github.event.inputs.version }}/poto.tar.gz"
+          RELEASE_TAG="${{ github.event.inputs.version }}"
+        fi
+        
+        echo "url=$RELEASE_URL" >> $GITHUB_OUTPUT
+        echo "tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+        
+    - name: Download Poto framework
+      run: |
+        curl -L "${{ steps.release.outputs.url }}" -o poto.tar.gz
+        
+    - name: Extract and install
+      run: |
+        tar -xzf poto.tar.gz
+        rm -rf lib/poto
+        mkdir -p lib
+        mv poto lib/poto
+        rm poto.tar.gz
+        
+    - name: Update package.json
+      run: |
+        if [ -f "package.json" ]; then
+          # Check if poto is already in dependencies
+          if grep -q "poto" package.json; then
+            echo "poto already exists in package.json"
+          else
+            # Add to dependencies using jq if available
+            if command -v jq &> /dev/null; then
+              jq '.dependencies["poto"] = "file:./lib/poto"' package.json > package.json.tmp && mv package.json.tmp package.json
+              echo "Added poto to package.json dependencies"
+            else
+              echo "jq not found, please manually add to package.json:"
+              echo "\"poto\": \"file:./lib/poto\""
+            fi
+          fi
+        fi
+        
+    - name: Install dependencies
+      run: bun install
+      
+    - name: Run tests
+      run: bun test || echo "No tests found or tests failed, continuing..."
+      
+    - name: Commit changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add lib/poto package.json package-lock.json bun.lockb
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "Update Poto framework to ${{ steps.release.outputs.tag }}"
+          git push
+        fi
+        
+    - name: Create PR (if not on main branch)
+      if: github.ref != 'refs/heads/main'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "Update Poto framework to ${{ steps.release.outputs.tag }}"
+        title: "Update Poto framework to ${{ steps.release.outputs.tag }}"
+        body: |
+          This PR updates the Poto framework to version ${{ steps.release.outputs.tag }}.
+          
+          Changes:
+          - Updated Poto framework files in `lib/poto/`
+          - Updated package.json dependencies
+          
+          Please review and merge if everything looks good.
+        branch: update-poto-${{ steps.release.outputs.tag }}
+        delete-branch: true

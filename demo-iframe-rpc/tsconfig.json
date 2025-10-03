@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+		"noUnusedLocals": false,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowJs": true,
+    "checkJs": true,
+    "baseUrl": ".",
+    "module": "ESNext",
+    "target": "ESNext",
+    "lib": [
+      "DOM",
+      "ESNext"
+    ],
+    "strict": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "jsx": "preserve",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "strictNullChecks": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    // "noUnusedParameters": false,
+    "importHelpers": true,
+    "sourceMap": true,
+    "paths": {
+      // "@/*": [
+      //   "./src/*"
+      // ]
+    },
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": [
+      "vite/client",
+      "node",
+      "bun-types"
+    ]
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "service"
+  ]
+}

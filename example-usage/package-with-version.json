@@ -1,0 +1,12 @@
+{
+  "name": "my-poto-app-with-version",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "poto": "https://github.com/iclass/poto/releases/download/v2025.10.01-abc123/poto.tar.gz"
+  },
+  "scripts": {
+    "dev": "bun run src/server.ts",
+    "start": "bun run src/server.ts"
+  }
+}
