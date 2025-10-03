@@ -76,9 +76,18 @@ export class ChatServerModule extends LLMPotoModule  {
 
     /**
      * Chat with conversation history (client interface version)
-     * Uses server-side dialogue journal for conversation storage
+     * Uses server-side dialogue journal for conversation storage with enhanced metadata
      */
     async *chatWithHistory(message: string, jsonOutput: boolean = false, reasoningEnabled: boolean = false): AsyncGenerator<string> {
+        const startTime = Date.now();
+        let firstTokenTime: number | null = null;
+        let tokenUsage: any = null;
+        let finishReason = 'unknown';
+        let responseId = '';
+        let systemFingerprint: string | null = null;
+        let llmModel = '';
+        let llmConfig: any = null;
+        
         try {
             // Get current user for dialogue journal
             const user = await this.getCurrentUser();
@@ -100,27 +109,208 @@ export class ChatServerModule extends LLMPotoModule  {
             // Load conversation history from dialogue journal
             const history = await this.dialogueJournal.getConversation(user);
             
-            // Use the generic LLM streaming method from the base class
+            // Get LLM instance to capture configuration
+            const llm = await this.getUserPreferredLLM();
+            llmModel = llm.model;
+            llmConfig = {
+                temperature: llm.temperature,
+                maxTokens: llm.max_tokens,
+                reasoningEnabled: llm.reasoningEnabled
+            };
+            
+            // Use enhanced streaming method to capture metadata
             let aiResponse = '';
-            for await (const text of this.streamLLMWithHistory(message, history, {
+            const streamingResult = await this.streamLLMWithMetadata(message, history, {
                 jsonOutput,
                 reasoningEnabled
-            })) {
-                aiResponse += text;
-                yield text;
+            });
+            
+            for await (const result of streamingResult) {
+                if (firstTokenTime === null) {
+                    firstTokenTime = Date.now();
+                }
+                aiResponse += result.content;
+                yield result.content;
+                
+                // Capture metadata from streaming result
+                if (result.metadata) {
+                    if (result.metadata.tokenUsage) {
+                        tokenUsage = result.metadata.tokenUsage;
+                    }
+                    finishReason = result.metadata.finishReason || 'unknown';
+                    responseId = result.metadata.responseId || '';
+                }
+                
+                // Capture final metadata (this is the key fix!)
+                if (result.finalMetadata) {
+                    tokenUsage = result.finalMetadata.tokenUsage;
+                    finishReason = result.finalMetadata.finishReason || 'unknown';
+                    responseId = result.finalMetadata.responseId || '';
+                    systemFingerprint = result.finalMetadata.systemFingerprint;
+                }
             }
             
-            // Add AI response to dialogue journal
+            // Calculate performance metrics
+            const processingTime = Date.now() - startTime;
+            const firstTokenLatency = firstTokenTime ? firstTokenTime - startTime : 0;
+            
+            // Calculate tokens per second only if we have actual token usage
+            const tokensPerSecond = tokenUsage ? (tokenUsage.total_tokens / (processingTime / 1000)) : 0;
+            
+            // Add AI response to dialogue journal with enhanced metadata
             if (aiResponse.trim()) {
                 await this.dialogueJournal.addMessage(user, { 
                     role: 'assistant', 
                     content: aiResponse,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    metadata: {
+                        model: llmModel,
+                        tokens: tokenUsage ? {
+                            prompt: tokenUsage.prompt_tokens || 0,
+                            completion: tokenUsage.completion_tokens || 0,
+                            total: tokenUsage.total_tokens || 0,
+                            input: tokenUsage.input_tokens || 0,
+                            output: tokenUsage.output_tokens || 0,
+                            cached: tokenUsage.cached_input_tokens || 0
+                        } : null,
+                        performance: {
+                            processingTimeMs: processingTime,
+                            firstTokenLatencyMs: firstTokenLatency,
+                            tokensPerSecond: Math.round(tokensPerSecond)
+                        },
+                        config: llmConfig,
+                        response: {
+                            finishReason,
+                            responseId: responseId || `resp_${Date.now()}`
+                        }
+                    }
                 });
             }
         } catch (error) {
             const err = error as Error;
             yield `Error: ${err.message}`;
+        }
+    }
+
+    /**
+     * Enhanced LLM streaming with metadata capture
+     */
+    private async *streamLLMWithMetadata(
+        message: string,
+        history: Array<{ role: 'user' | 'assistant'; content: string }>,
+        options: {
+            jsonOutput?: boolean;
+            reasoningEnabled?: boolean;
+            systemPrompt?: string;
+        } = {}
+    ): AsyncGenerator<{ content: string; metadata?: any; finalMetadata?: any }> {
+        try {
+            // Get cancellation-aware LLM instance with user-specific model from session
+            const llm = await this.getUserPreferredLLM();
+            llm.clearFormat();
+            
+            // Set JSON output format if requested
+            if (options.jsonOutput) {
+                llm.responseFormat = 'json_object';
+            }
+            
+            // Set reasoning enabled/disabled
+            llm.setReasoningEnabled(options.reasoningEnabled || false);
+            
+            // Set system prompt based on output mode
+            if (options.systemPrompt) {
+                llm.system(options.systemPrompt);
+            } else if (options.jsonOutput) {
+                llm.system("You are a helpful AI assistant. Always respond with valid JSON format. Structure your responses as JSON objects with appropriate fields. Maintain conversation context and provide relevant responses.");
+            } else {
+                llm.system("You are a helpful AI assistant. Maintain conversation context and provide relevant responses.");
+            }
+
+            // Load conversation history into LLM context
+            for (const msg of history) {
+                if (msg.role === 'user') {
+                    llm.user(msg.content);
+                } else {
+                    llm.assistant(msg.content);
+                }
+            }
+
+            // Add current message
+            llm.user(message);
+
+            // Stream the response and capture metadata
+            const stream = await llm.requestCompletionStream_();
+            const reader = stream.getReader();
+            let tokenUsage: any = null;
+            let finishReason = 'unknown';
+            let responseId = '';
+            let systemFingerprint: string | null = null;
+            
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = value as any;
+                    const content = chunk.getContent();
+                    
+                    
+                    // Capture metadata from any chunk that has it
+                    if (chunk.usage) {
+                        tokenUsage = chunk.usage;
+                    }
+                    if (chunk.id) {
+                        responseId = chunk.id;
+                    }
+                    if (chunk.systemFingerprint) {
+                        systemFingerprint = chunk.systemFingerprint;
+                    }
+                    
+                    // Capture metadata from final chunk
+                    if (chunk.isDone && chunk.isDone()) {
+                        finishReason = chunk.getFinishReason() || 'unknown';
+                        
+                        // Final chance to capture usage if not already captured
+                        if (chunk.usage && !tokenUsage) {
+                            tokenUsage = chunk.usage;
+                        }
+                    }
+                    
+                    if (content) {
+                        yield { 
+                            content,
+                            metadata: {
+                                tokenUsage,
+                                finishReason,
+                                responseId,
+                                systemFingerprint
+                            }
+                        };
+                    }
+                }
+            } finally {
+                reader.releaseLock();
+                
+                
+                // Return final metadata with captured token usage
+                yield {
+                    content: '',
+                    finalMetadata: {
+                        tokenUsage,
+                        finishReason,
+                        responseId,
+                        systemFingerprint
+                    }
+                };
+            }
+        } catch (error) {
+            const err = error as Error;
+            yield { 
+                content: `Error: ${err.message}`,
+                metadata: {
+                    error: err.message
+                }
+            };
         }
     }
 

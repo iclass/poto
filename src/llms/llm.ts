@@ -174,6 +174,7 @@ export class LLM {
         maxTokens: number;
         actualTokens: number;
     }>;
+    
 
     /**
      * Get the correct parameter name for max tokens based on the model
@@ -477,11 +478,17 @@ export class LLM {
         // Add universal reasoning control
         this.addReasoningControlToBody(bodyObj);
 
+        // Add stream_options for Doubao to include token usage in streaming
+        if (this.isDoubaoModel()) {
+            bodyObj.stream_options = { include_usage: true };
+        }
+
         if (debug) {
             console.debug('>>> body to llm (streaming)')
             console.dir(bodyObj, { depth: null })
             console.debug('<<< ')
         }
+        
         
 
         const body = JSON.stringify(bodyObj);
@@ -591,6 +598,8 @@ export class LLM {
                                      }
                                      */
                                     const parsed: OpenAIStreamingChunk = JSON.parse(data) as OpenAIStreamingChunk;
+                                    
+                                    
                                     const streamingChunk = new StreamingChunk(parsed);
                                     controller.enqueue(streamingChunk);
                                 } catch (e) {

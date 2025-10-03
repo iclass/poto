@@ -620,16 +620,31 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
         // Add metadata if present
         if (message.metadata) {
             lines.push('  metadata:');
-            for (const [key, value] of Object.entries(message.metadata)) {
-                if (typeof value === 'string') {
-                    lines.push(`    ${key}: "${value}"`);
-                } else {
-                    lines.push(`    ${key}: ${value}`);
-                }
-            }
+            this.addMetadataToYAML(lines, message.metadata, 2);
         }
         
         return lines.join('\n');
+    }
+
+    private addMetadataToYAML(lines: string[], obj: any, indentLevel: number): void {
+        const indent = '  '.repeat(indentLevel);
+        
+        for (const [key, value] of Object.entries(obj)) {
+            if (value === null || value === undefined) {
+                lines.push(`${indent}${key}: null`);
+            } else if (typeof value === 'string') {
+                lines.push(`${indent}${key}: "${value}"`);
+            } else if (typeof value === 'number' || typeof value === 'boolean') {
+                lines.push(`${indent}${key}: ${value}`);
+            } else if (Array.isArray(value)) {
+                lines.push(`${indent}${key}: [${value.join(', ')}]`);
+            } else if (typeof value === 'object') {
+                lines.push(`${indent}${key}:`);
+                this.addMetadataToYAML(lines, value, indentLevel + 1);
+            } else {
+                lines.push(`${indent}${key}: ${value}`);
+            }
+        }
     }
 
     private async ensureDirectoryExists(dirPath: string): Promise<void> {

@@ -1,15 +1,43 @@
 import { PotoUser } from "./UserProvider";
 
-// Enhanced ChatMessage interface
+// Enhanced ChatMessage interface with nested metadata structure
 export interface ChatMessage {
     role: 'user' | 'assistant';
     content: string;
     timestamp: string;
     metadata?: {
+        // Basic info
         model?: string;
-        tokens?: number;
-        processingTime?: number;
-        sessionId?: string;
+        
+        // Token usage (most important) - null if not available
+        tokens?: {
+            prompt: number;
+            completion: number;
+            total: number;
+            input: number;
+            output: number;
+            cached: number;
+        } | null;
+        
+        // Performance metrics (most important)
+        performance?: {
+            processingTimeMs: number;
+            firstTokenLatencyMs: number;
+            tokensPerSecond: number;
+        };
+        
+        // LLM configuration
+        config?: {
+            temperature: number;
+            maxTokens: number;
+            reasoningEnabled: boolean;
+        };
+        
+        // Response details
+        response?: {
+            finishReason: string;
+            responseId: string;
+        };
     };
 }
 
