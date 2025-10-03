@@ -75,6 +75,12 @@ server:
     maxAge: 86400000  # 24 hours
     secure: false
     httpOnly: true
+  
+  # Session Monitoring Configuration
+  sessionMonitoring:
+    enabled: true
+    timeoutMs: 300000  # 5 minutes
+    checkIntervalMs: 30000  # 30 seconds
 
 # Logging Configuration
 logging:
