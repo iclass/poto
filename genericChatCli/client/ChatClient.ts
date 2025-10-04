@@ -1328,21 +1328,21 @@ export class ChatClient {
     }
 
     /**
-     * Clear conversation history on server (archives current conversation first)
+     * Archive current conversation on server (preserves conversation data)
      */
     private async clearConversationHistory(): Promise<void> {
         try {
-            console.log(ColorUtils.info('🔄 Clearing conversation history (will archive first if possible)...'));
+            console.log(ColorUtils.info('📦 Archiving current conversation...'));
             
-            const success = await this.chatServerModuleProxy.clearConversation();
+            const success = await this.chatServerModuleProxy.archiveCurrentConversation();
             
             if (success) {
-                console.log(ColorUtils.success('✅ Conversation history cleared (server-side)'));
+                console.log(ColorUtils.success('✅ Conversation archived successfully'));
             } else {
-                console.log(ColorUtils.error('❌ Failed to clear conversation history'));
+                console.log(ColorUtils.error('❌ Failed to archive conversation'));
             }
         } catch (error) {
-            console.error(ColorUtils.error('❌ Failed to clear conversation history:'), error);
+            console.error(ColorUtils.error('❌ Failed to archive conversation:'), error);
         }
         
         this.rl.prompt();
