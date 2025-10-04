@@ -886,7 +886,7 @@ export class ChatClient {
             this.updatePrompt();
 
             // Make a non-streaming request that will take time
-            const response = await this.chatServerModuleProxy.postChatNonStreaming(
+            const response = await this.chatServerModuleProxy.chatNonStreaming(
                 "Write a very long and detailed story with many characters and plot twists. Make it at least 2000 words long.",
                 "You are a creative storyteller. Write engaging, detailed stories."
             );
@@ -939,8 +939,10 @@ export class ChatClient {
                 // Server now manages conversation history via DialogueJournal
                 const responseGenerator = await this.chatServerModuleProxy.chatWithHistory(
                     message, 
-                    this.jsonOutputMode, // Pass JSON output mode
-                    this.reasoningEnabled // Pass reasoning enabled
+                    {
+                        jsonOutput: this.jsonOutputMode,
+                        reasoningEnabled: this.reasoningEnabled
+                    }
                 );
 
                 for await (const text of responseGenerator) {
@@ -958,7 +960,7 @@ export class ChatClient {
             } else {
                 // Use non-streaming approach
                 const response = await this.makeRequest(async () => {
-                    return await this.chatServerModuleProxy.postChatNonStreaming(
+                    return await this.chatServerModuleProxy.chatNonStreaming(
                         message,
                         this.systemPrompt || "You are a helpful AI assistant. Maintain conversation context and provide relevant responses."
                     );

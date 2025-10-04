@@ -1014,18 +1014,12 @@ export class LLMPotoModule extends PotoModule {
 	async onLogin(userId: string): Promise<void> {
 		console.log(`🔐 User ${userId} logged in successfully`);
 		
-		// Check if user has an existing active session
-		const existingSession = this.getUserSessionInfo(userId);
-		if (existingSession && existingSession.isActive) {
-			console.log(`📱 User ${userId} had existing session, archiving current dialog...`);
-			
-			try {
-				// Archive the existing conversation before starting fresh
-				await this.archiveUserDialog(userId);
-				console.log(`✅ Previous dialog archived for user ${userId}`);
-			} catch (error) {
-				console.error(`❌ Failed to archive previous dialog for user ${userId}:`, error);
-			}
+		// Always archive existing conversation on login to start fresh
+		try {
+			await this.archiveUserDialog(userId);
+			console.log(`✅ Previous dialog archived for user ${userId}`);
+		} catch (error) {
+			console.error(`❌ Failed to archive previous dialog for user ${userId}:`, error);
 		}
 		
 		// Start a new session for the user
@@ -1045,6 +1039,8 @@ export class LLMPotoModule extends PotoModule {
 				const conversation = await this.dialogueJournal.getConversation(user);
 				
 				if (conversation.length > 0) {
+					console.log(`📊 Found ${conversation.length} messages to archive for user ${userId}`);
+					
 					// Archive the conversation if supported
 					if (this.dialogueJournal.archiveConversation) {
 						const archiveId = await this.dialogueJournal.archiveConversation(user);
@@ -1054,7 +1050,11 @@ export class LLMPotoModule extends PotoModule {
 						await this.dialogueJournal.clearConversation(user);
 						console.log(`🧹 Cleared conversation for user ${userId} (archiving not supported)`);
 					}
+				} else {
+					console.log(`ℹ️  No conversation to archive for user ${userId}`);
 				}
+			} else {
+				console.log(`ℹ️  No dialogue journal available for user ${userId}`);
 			}
 		} catch (error) {
 			console.error(`❌ Error archiving dialog for user ${userId}:`, error);

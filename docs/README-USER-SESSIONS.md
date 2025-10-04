@@ -116,7 +116,7 @@ async *someBusinessMethod(...args): AsyncGenerator<string> {
 1. **`postChat()`** - Simple streaming chat
 2. **`chatWithHistory()`** - Chat with conversation history
 3. **`postChatWithHistoryAndUser()`** - Chat with user context
-4. **`postChatNonStreaming()`** - Non-streaming chat
+4. **`chatNonStreaming()`** - Non-streaming chat
 5. **`postChatWithParams()`** - Chat with custom parameters
 
 All these methods call `getLLM()`, which automatically:
