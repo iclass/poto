@@ -105,6 +105,11 @@ export class ColorUtils {
         return ColorUtils.color(text, config.colors.aiResponse);
     }
 
+    static reasoning(text: string): string {
+        const config = ChatConfigManager.getConfig();
+        return ColorUtils.color(text, config.colors.reasoning);
+    }
+
     static success(text: string): string {
         const config = ChatConfigManager.getConfig();
         return ColorUtils.color(text, config.colors.success);

@@ -30,7 +30,7 @@
 	"scripts": {
 		"quickchat": "bun genericChatCli/client/ChatClient.ts",
 		"chat-server": "bun --hot genericChatCli/start-server.ts",
-		"chat-client": "bun genericChatCli/start-client.ts",
+		"chat-client": "bun --hot genericChatCli/start-client.ts",
 		"build": "bun run build:clean && bun run build:compile",
 		"build:clean": "rimraf dist",
 		"build:compile": "bun run tsc",
@@ -50,6 +50,10 @@
 	},
 	"dependencies": {
 		"dotenv": "^17.2.0",
+		"it-all": "^3.0.9",
+		"it-first": "^3.0.9",
+		"it-merge": "^3.0.12",
+		"it-take": "^3.0.9",
 		"js-base64": "^3.7.7",
 		"js-yaml": "^4.1.0",
 		"jsonrepair": "^3.13.0",

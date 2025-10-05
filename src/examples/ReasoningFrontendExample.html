@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chat with Reasoning Display</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #7f8c8d;
+            font-size: 16px;
+        }
+
+        .chat-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .chat-messages {
+            height: 500px;
+            overflow-y: auto;
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .message {
+            margin-bottom: 20px;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            text-align: right;
+        }
+
+        .message.user .message-content {
+            background: #007acc;
+            color: white;
+            display: inline-block;
+            padding: 10px 15px;
+            border-radius: 18px 18px 4px 18px;
+            max-width: 70%;
+        }
+
+        .message.ai .message-content {
+            background: #f8f9fa;
+            color: #333;
+            padding: 15px;
+            border-radius: 18px 18px 18px 4px;
+            max-width: 85%;
+            border: 1px solid #e9ecef;
+        }
+
+        .reasoning-section {
+            background: #f0f8ff;
+            border-left: 4px solid #007acc;
+            padding: 12px 15px;
+            margin: 10px 0;
+            border-radius: 0 8px 8px 0;
+            font-style: italic;
+            color: #555;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .reasoning-section .reasoning-header {
+            font-weight: 600;
+            color: #007acc;
+            margin-bottom: 5px;
+            font-style: normal;
+        }
+
+        .content-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+
+        .error-message {
+            background: #ffe6e6;
+            color: #cc0000;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-left: 4px solid #ff4444;
+        }
+
+        .input-container {
+            display: flex;
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #eee;
+        }
+
+        .input-container input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .input-container input:focus {
+            border-color: #007acc;
+        }
+
+        .input-container button {
+            margin-left: 10px;
+            padding: 12px 24px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+
+        .input-container button:hover {
+            background: #0056b3;
+        }
+
+        .input-container button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 10px 15px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .typing-indicator.show {
+            display: block;
+        }
+
+        .model-info {
+            background: #e8f4fd;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .controls button {
+            padding: 8px 16px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s ease;
+        }
+
+        .controls button:hover {
+            background: #5a6268;
+        }
+
+        .controls button.active {
+            background: #007acc;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .chat-messages {
+                height: 400px;
+            }
+            
+            .message.user .message-content,
+            .message.ai .message-content {
+                max-width: 90%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 AI Chat with Reasoning Display</h1>
+            <p>See how the AI thinks through problems in real-time</p>
+        </div>
+
+        <div class="model-info" id="model-info">
+            Loading model information...
+        </div>
+
+        <div class="controls">
+            <button id="reasoning-toggle" class="active">🧠 Reasoning ON</button>
+            <button id="clear-chat">🗑️ Clear Chat</button>
+            <button id="archive-chat">📦 Archive Chat</button>
+        </div>
+
+        <div class="chat-container">
+            <div class="chat-messages" id="chat-messages">
+                <div class="message ai">
+                    <div class="message-content">
+                        <div class="content-section">
+                            Hello! I'm an AI assistant with reasoning capabilities. 
+                            Ask me a question and I'll show you my thinking process as I work through it.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="typing-indicator" id="typing-indicator">
+                AI is thinking...
+            </div>
+            <div class="input-container">
+                <input type="text" id="message-input" placeholder="Ask me anything..." autocomplete="off">
+                <button id="send-button">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class ReasoningChat {
+            constructor() {
+                this.reasoningEnabled = true;
+                this.currentMessage = null;
+                this.init();
+            }
+
+            init() {
+                this.setupEventListeners();
+                this.loadModelInfo();
+            }
+
+            setupEventListeners() {
+                const input = document.getElementById('message-input');
+                const sendButton = document.getElementById('send-button');
+                const reasoningToggle = document.getElementById('reasoning-toggle');
+                const clearButton = document.getElementById('clear-chat');
+                const archiveButton = document.getElementById('archive-chat');
+
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+
+                sendButton.addEventListener('click', () => this.sendMessage());
+                reasoningToggle.addEventListener('click', () => this.toggleReasoning());
+                clearButton.addEventListener('click', () => this.clearChat());
+                archiveButton.addEventListener('click', () => this.archiveChat());
+            }
+
+            async loadModelInfo() {
+                try {
+                    const response = await fetch('/api/llm-reasoning/model-info', {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    
+                    if (response.ok) {
+                        const modelInfo = await response.json();
+                        document.getElementById('model-info').innerHTML = 
+                            `Model: ${modelInfo.model} | Name: ${modelInfo.name} | Default: ${modelInfo.isDefault ? 'Yes' : 'No'}`;
+                    }
+                } catch (error) {
+                    console.error('Error loading model info:', error);
+                }
+            }
+
+            async sendMessage() {
+                const input = document.getElementById('message-input');
+                const message = input.value.trim();
+                if (!message) return;
+
+                input.value = '';
+                this.addUserMessage(message);
+                this.showTyping();
+
+                try {
+                    const endpoint = this.reasoningEnabled ? 
+                        '/api/llm-reasoning/chat-with-reasoning' : 
+                        '/api/llm-reasoning/chat-simple';
+
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    await this.handleStreamingResponse(response);
+                } catch (error) {
+                    this.addErrorMessage('Error: ' + error.message);
+                } finally {
+                    this.hideTyping();
+                }
+            }
+
+            async handleStreamingResponse(response) {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                let aiMessage = null;
+                let reasoningElement = null;
+                let contentElement = null;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                
+                                if (this.reasoningEnabled) {
+                                    // Handle SimpleStreamPacket with reasoning
+                                    this.handleSimpleStreamPacket(data, aiMessage, reasoningElement, contentElement);
+                                } else {
+                                    // Handle simple text streaming
+                                    this.handleTextStream(data, aiMessage, contentElement);
+                                }
+                            } catch (e) {
+                                console.error('Error parsing SSE data:', e);
+                            }
+                        }
+                    }
+                }
+            }
+
+            handleSimpleStreamPacket(data, aiMessage, reasoningElement, contentElement) {
+                if (!aiMessage) {
+                    aiMessage = this.addAIMessage();
+                }
+
+                // Handle reasoning content
+                if (data.reasoning) {
+                    if (!reasoningElement) {
+                        reasoningElement = document.createElement('div');
+                        reasoningElement.className = 'reasoning-section';
+                        reasoningElement.innerHTML = '<div class="reasoning-header">🧠 AI Reasoning:</div>';
+                        aiMessage.querySelector('.message-content').appendChild(reasoningElement);
+                    }
+                    reasoningElement.innerHTML += data.reasoning + ' ';
+                }
+
+                // Handle main content
+                if (data.content) {
+                    if (!contentElement) {
+                        contentElement = document.createElement('div');
+                        contentElement.className = 'content-section';
+                        aiMessage.querySelector('.message-content').appendChild(contentElement);
+                    }
+                    contentElement.innerHTML += data.content;
+                }
+
+                // Handle errors
+                if (data.source === 'error') {
+                    this.addErrorMessage(data.content);
+                }
+            }
+
+            handleTextStream(data, aiMessage, contentElement) {
+                if (!aiMessage) {
+                    aiMessage = this.addAIMessage();
+                }
+
+                if (!contentElement) {
+                    contentElement = document.createElement('div');
+                    contentElement.className = 'content-section';
+                    aiMessage.querySelector('.message-content').appendChild(contentElement);
+                }
+
+                contentElement.innerHTML += data;
+            }
+
+            addUserMessage(message) {
+                const container = document.getElementById('chat-messages');
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message user';
+                messageDiv.innerHTML = `
+                    <div class="message-content">${this.escapeHtml(message)}</div>
+                `;
+                container.appendChild(messageDiv);
+                this.scrollToBottom();
+            }
+
+            addAIMessage() {
+                const container = document.getElementById('chat-messages');
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message ai';
+                messageDiv.innerHTML = '<div class="message-content"></div>';
+                container.appendChild(messageDiv);
+                this.scrollToBottom();
+                return messageDiv;
+            }
+
+            addErrorMessage(message) {
+                const container = document.getElementById('chat-messages');
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.innerHTML = this.escapeHtml(message);
+                container.appendChild(errorDiv);
+                this.scrollToBottom();
+            }
+
+            showTyping() {
+                document.getElementById('typing-indicator').classList.add('show');
+                this.scrollToBottom();
+            }
+
+            hideTyping() {
+                document.getElementById('typing-indicator').classList.remove('show');
+            }
+
+            scrollToBottom() {
+                const container = document.getElementById('chat-messages');
+                container.scrollTop = container.scrollHeight;
+            }
+
+            toggleReasoning() {
+                this.reasoningEnabled = !this.reasoningEnabled;
+                const button = document.getElementById('reasoning-toggle');
+                button.textContent = this.reasoningEnabled ? '🧠 Reasoning ON' : '🧠 Reasoning OFF';
+                button.classList.toggle('active', this.reasoningEnabled);
+            }
+
+            async clearChat() {
+                if (confirm('Are you sure you want to clear the chat?')) {
+                    document.getElementById('chat-messages').innerHTML = `
+                        <div class="message ai">
+                            <div class="message-content">
+                                <div class="content-section">
+                                    Chat cleared. How can I help you today?
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            async archiveChat() {
+                try {
+                    const response = await fetch('/api/llm-reasoning/archive-conversation', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+
+                    if (response.ok) {
+                        alert('Conversation archived successfully!');
+                    } else {
+                        alert('Failed to archive conversation.');
+                    }
+                } catch (error) {
+                    alert('Error archiving conversation: ' + error.message);
+                }
+            }
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+        }
+
+        // Initialize the chat when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new ReasoningChat();
+        });
+    </script>
+</body>
+</html>

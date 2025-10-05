@@ -8,6 +8,7 @@ export interface ChatMessage {
     metadata?: {
         // Basic info
         model?: string;
+        reasoning?: string;
         
         // Token usage (most important) - null if not available
         tokens?: {

@@ -633,11 +633,21 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
             if (value === null || value === undefined) {
                 lines.push(`${indent}${key}: null`);
             } else if (typeof value === 'string') {
-                lines.push(`${indent}${key}: "${value}"`);
+                // Handle multi-line strings with YAML literal block notation
+                if (value.includes('\n') || value.length > 100) {
+                    lines.push(`${indent}${key}: |`);
+                    const escapedLines = value.split('\n').map(line => this.escapeYAMLString(line));
+                    escapedLines.forEach(line => lines.push(`${indent}  ${line}`));
+                } else {
+                    // Single line strings - use quoted format
+                    const escaped = this.escapeYAMLString(value);
+                    lines.push(`${indent}${key}: "${escaped}"`);
+                }
             } else if (typeof value === 'number' || typeof value === 'boolean') {
                 lines.push(`${indent}${key}: ${value}`);
             } else if (Array.isArray(value)) {
-                lines.push(`${indent}${key}: [${value.join(', ')}]`);
+                const escapedArray = value.map(v => typeof v === 'string' ? `"${this.escapeYAMLString(v)}"` : v);
+                lines.push(`${indent}${key}: [${escapedArray.join(', ')}]`);
             } else if (typeof value === 'object') {
                 lines.push(`${indent}${key}:`);
                 this.addMetadataToYAML(lines, value, indentLevel + 1);
@@ -645,6 +655,15 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
                 lines.push(`${indent}${key}: ${value}`);
             }
         }
+    }
+
+    private escapeYAMLString(str: string): string {
+        return str
+            .replace(/\\/g, '\\\\')  // Escape backslashes
+            .replace(/"/g, '\\"')     // Escape quotes
+            .replace(/\n/g, '\\n')   // Escape newlines
+            .replace(/\r/g, '\\r')   // Escape carriage returns
+            .replace(/\t/g, '\\t');  // Escape tabs
     }
 
     private async ensureDirectoryExists(dirPath: string): Promise<void> {

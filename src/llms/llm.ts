@@ -2,6 +2,7 @@ import { CompletionResponse, RawLLMResponse, RawResponsesResponse, TokenUsage, c
 import { JSONSchema } from "../shared/JSONSchema";
 import {getAppEnv} from '../AppEnv'
 import { DialogEntry, DialogRole, OpenAIContentBlock, DialogRoles } from "../shared/CommonTypes";
+import { SimpleStreamPacket } from "../shared/SimpleStreamPacket";
 import { LLMConfig } from "./LLMConfig";
 
 /**
@@ -128,6 +129,43 @@ export class StreamingChunk {
     getRole(): string | undefined {
         return this.choices[0]?.delta?.role;
     }
+
+    /**
+     * Get the reasoning content delta from the first choice
+     * This extracts the thinking/reasoning content from models that support it
+     */
+    getReasoningContent(): string {
+        const delta = this.choices[0]?.delta;
+        if (!delta) return '';
+        
+        // Extract reasoning content (thinking channel)
+        if (delta.reasoning_content !== undefined && delta.reasoning_content !== null && delta.reasoning_content.length > 0) {
+            return delta.reasoning_content;
+        }
+        
+        return '';
+    }
+
+    /**
+     * Create a SimpleStreamPacket from this StreamingChunk
+     * This provides a unified way to handle both content and reasoning channels
+     */
+    toStreamPacket(): SimpleStreamPacket {
+        const delta = this.choices?.[0]?.delta;
+        if (!delta) {
+            return new SimpleStreamPacket('llm', '', '');
+        }
+
+        // Extract reasoning content
+        const reasoning = delta.reasoning_content || '';
+        
+        // Extract main content
+        const content = delta.content || '';
+
+        // Clean output - no debug logging
+
+        return new SimpleStreamPacket('llm', reasoning, content);
+    }
 }
 
 /**
@@ -135,7 +173,16 @@ export class StreamingChunk {
  */
 export class LLM {
     static remainingTokens = 300000
+    static debugMode = false
     static remainingRequests = 300
+
+    static setDebugMode(enabled: boolean): void {
+        LLM.debugMode = enabled;
+    }
+
+    static getDebugMode(): boolean {
+        return LLM.debugMode;
+    }
 
     static reqDelay = 1
     static delayIncrement = 50 // ms
@@ -451,7 +498,7 @@ export class LLM {
      *      AbortError - abort signal
      *      LLMError - LLM related errors
      */
-    async requestCompletionStream_(maxTokens: number = 3000, debug: boolean = false, signal?: AbortSignal): Promise<ReadableStream<StreamingChunk>> {
+    async requestCompletionStream_(maxTokens: number = 3000, signal?: AbortSignal): Promise<ReadableStream<StreamingChunk>> {
         // Use Chat Completions API for all models (including GPT-5)
 
         // Validate prompt length before making the request to prevent runaway costs
@@ -483,7 +530,7 @@ export class LLM {
             bodyObj.stream_options = { include_usage: true };
         }
 
-        if (debug) {
+        if (LLM.debugMode) {
             console.debug('>>> body to llm (streaming)')
             console.dir(bodyObj, { depth: null })
             console.debug('<<< ')
@@ -604,7 +651,7 @@ export class LLM {
                                     controller.enqueue(streamingChunk);
                                 } catch (e) {
                                     // Log non-JSON data for debugging, but don't fail
-                                    if (debug) {
+                                    if (LLM.debugMode) {
                                         console.debug('Non-JSON data in SSE stream:', data);
                                         console.debug('Parse error:', e);
                                     }
@@ -613,18 +660,18 @@ export class LLM {
                             }
                             // Handle other SSE field types (event, id, retry) if needed
                             else if (line.startsWith('event: ') || line.startsWith('id: ') || line.startsWith('retry: ')) {
-                                if (debug) {
+                                if (LLM.debugMode) {
                                     console.debug('SSE field:', line);
                                 }
                             }
                             // Handle comment lines (start with :)
                             else if (line.startsWith(':')) {
-                                if (debug) {
+                                if (LLM.debugMode) {
                                     console.debug('SSE comment:', line);
                                 }
                             }
                             // Log unexpected lines for debugging
-                            else if (debug && line.trim() !== '') {
+                            else if (LLM.debugMode && line.trim() !== '') {
                                 console.debug('Unexpected SSE line:', line);
                             }
                         }
@@ -710,8 +757,8 @@ export class LLM {
      * @param debug Whether to enable debug logging
      * @returns ReadableStream<string>
      */
-    async requestCompletionStreamText_(maxTokens: number = 3000, debug: boolean = false, signal?: AbortSignal): Promise<ReadableStream<string>> {
-        const chunkStream = await this.requestCompletionStream_(maxTokens, debug, signal);
+    async requestCompletionStreamText_(maxTokens: number = 3000, signal?: AbortSignal): Promise<ReadableStream<string>> {
+        const chunkStream = await this.requestCompletionStream_(maxTokens, signal);
         
         const llmSelf2 = this;
         return new ReadableStream<string>({
@@ -771,11 +818,11 @@ export class LLM {
      * @param debug Whether to enable debug logging
      * @returns AsyncGenerator<string>
      */
-    async *requestCompletionTextGenerator_(maxTokens: number = 3000, debug: boolean = false): AsyncGenerator<string> {
+    async *requestCompletionTextGenerator_(maxTokens: number = 3000): AsyncGenerator<string> {
         // Validate prompt length before making the request to prevent runaway costs
         this.validatePromptLength();
         
-        const stream = await this.requestCompletionStream_(maxTokens, debug);
+        const stream = await this.requestCompletionStream_(maxTokens);
         const reader = stream.getReader();
         
         try {
@@ -831,11 +878,7 @@ export class LLM {
      */
     setReasoningEnabled(enabled: boolean): void {
         this.reasoningEnabled = enabled;
-        // console.log(`🧠 Universal reasoning control ${enabled ? 'enabled' : 'disabled'} for model: ${this.model}`);
-        
-        // if (enabled) {
-        //     console.warn(`⚠️ WARNING: Reasoning is enabled but reasoning content will be ignored in responses. Only the main content will be processed and returned to the client.`);
-        // }
+        console.log(`🧠 Reasoning ${enabled ? 'enabled' : 'disabled'} for model: ${this.model}`);
     }
 
     /**
@@ -856,7 +899,7 @@ export class LLM {
      */
     private addReasoningControlToBody(bodyObj: any): void {
         if (this.isDoubaoModel()) {
-            // Doubao models use "thinking" field - automatically set to enabled when reasoning is on
+            // Use the thinking field for Doubao reasoning
             if (this.reasoningEnabled) {
                 bodyObj.thinking = { type: "enabled" };
             } else {

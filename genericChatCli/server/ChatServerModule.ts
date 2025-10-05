@@ -1,6 +1,7 @@
 import { PotoUser } from "../../src/server/UserProvider";
 import { LLMPotoModule, LLMPotoModuleOptions } from "../../src/llms/LLMPotoModule";
-import type { LLM } from "../../src/llms/llm";
+import { LLM } from "../../src/llms/llm";
+import { SimpleStreamPacket } from "../../src/shared/SimpleStreamPacket";
 
 export interface ChatMessage {
     role: 'user' | 'assistant';
@@ -56,6 +57,83 @@ export class ChatServerModule extends LLMPotoModule  {
         }
     }
 
+
+    /**
+     * Reasoning-enabled streaming chat with SimpleStreamPacket support
+     * Returns both reasoning and content streams for real-time display
+     */
+    async *chatWithReasoning(
+        message: string, 
+        options: {
+            jsonOutput?: boolean;
+            reasoningEnabled?: boolean;
+            systemPrompt?: string;
+        } = {}
+    ): AsyncGenerator<SimpleStreamPacket> {
+        // Use the new chatWithReasoning method from LLMPotoModule
+        for await (const packet of super.chatWithReasoning(message, options)) {
+            yield packet;
+        }
+    }
+
+    /**
+     * Public RPC method for reasoning-enabled chat
+     * Exposes the chatWithReasoning functionality to the client
+     */
+    async *postChatWithReasoning(
+        message: string, 
+        options: {
+            jsonOutput?: boolean;
+            reasoningEnabled?: boolean;
+            systemPrompt?: string;
+        } = {}
+    ): AsyncGenerator<SimpleStreamPacket> {
+        // Use the internal chatWithReasoning method
+        for await (const packet of this.chatWithReasoning(message, options)) {
+            yield packet;
+        }
+    }
+
+    /**
+     * Public RPC method to control LLM debug mode
+     * Exposes debug mode control to the client
+     */
+    async setLLMDebugMode(enabled: boolean): Promise<void> {
+        LLM.setDebugMode(enabled);
+    }
+
+    /**
+     * Public RPC method to get current LLM debug mode
+     */
+    async getLLMDebugMode(): Promise<boolean> {
+        return LLM.getDebugMode();
+    }
+
+    /**
+     * Public RPC method to clear current conversation
+     * Exposes the clearConversation functionality to the client
+     */
+    async clearCurrentConversation(): Promise<boolean> {
+        try {
+            const user = await this.getCurrentUser();
+            if (!user) {
+                console.error('❌ User not authenticated for clear conversation');
+                return false;
+            }
+
+            if (this.dialogueJournal) {
+                await this.dialogueJournal.clearConversation(user);
+                console.log(`🧹 Cleared conversation for user ${user.id}`);
+                return true;
+            } else {
+                console.log('⚠️ No dialogue journal available for clearing conversation');
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ Failed to clear conversation:', error);
+            return false;
+        }
+    }
 
     /**
      * Non-streaming chat with dialogue journal integration

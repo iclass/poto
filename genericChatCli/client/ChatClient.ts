@@ -2,6 +2,7 @@ import type { ChatServerModule } from "../server/ChatServerModule";
 import { PotoClient, PotoConstants } from "../../src/index";
 import { getAppEnv } from "../../src/AppEnv";
 import { ChatMessage, ModelInfo} from "../shared/types";
+import { SimpleStreamPacket } from "../../src/shared/SimpleStreamPacket";
 import * as readline from 'readline';
 import { startServer } from "../server/ServerMain";
 import { ColorUtils } from "./ColorUtils";
@@ -25,6 +26,7 @@ export class ChatClient {
     private jsonOutputMode = false;
     private reasoningEnabled: boolean = false;
     private streamingEnabled: boolean = true;
+    private messageBodyEnabled: boolean = true;
     private isAuthenticated = false;
     private currentUser?: string;
     private verboseMode = false;
@@ -247,13 +249,14 @@ export class ChatClient {
         const jsonMode = this.jsonOutputMode ? ' [JSON]' : '';
         const reasoningMode = this.reasoningEnabled ? ' [reasoning]' : '';
         const streamingMode = this.streamingEnabled ? ' [streaming]' : ' [non-streaming]';
+        const messageBodyMode = this.messageBodyEnabled ? ' [body]' : ' [meta]';
         const verboseMode = this.verboseMode ? ' [verbose]' : '';
         const userInfo = this.currentUser ? ` [👤${this.currentUser}]` : '';
         
         if (this.isProcessingRequest) {
-            this.rl.setPrompt(`🔄 (Ctrl+C to interrupt) ${modelInfo}${jsonMode}${reasoningMode}${streamingMode}${verboseMode}${userInfo} > `);
+            this.rl.setPrompt(`🔄 (Ctrl+C to interrupt) ${modelInfo}${jsonMode}${reasoningMode}${streamingMode}${messageBodyMode}${verboseMode}${userInfo} > `);
         } else {
-            this.rl.setPrompt(`${modelInfo}${jsonMode}${reasoningMode}${streamingMode}${verboseMode}${userInfo} > `);
+            this.rl.setPrompt(`${modelInfo}${jsonMode}${reasoningMode}${streamingMode}${messageBodyMode}${verboseMode}${userInfo} > `);
         }
     }
 
@@ -345,17 +348,10 @@ export class ChatClient {
     }
 
     /**
-     * Check if input is a command (starts with known command prefixes)
+     * Check if input is a command (starts with '/' prefix)
      */
     private isCommand(input: string): boolean {
-        const commands = [
-            'quit', 'exit', 'bye', 'clear', 'history', 'cancel', 'status',
-            'autocancel', 'test-nonstream', 'models', 'model', 'json', 'reasoning',
-            'streaming', 'system', 'color', 'markdown', 'attach', 'help', 'login', 'logout', 'verbose'
-        ];
-        
-        const firstWord = input.split(' ')[0].toLowerCase();
-        return commands.includes(firstWord);
+        return input.startsWith('/');
     }
 
     /**
@@ -389,55 +385,60 @@ export class ChatClient {
             this.addToHistory(message);
         }
 
-        // Allow login and logout commands even when not authenticated
-        if (['login', 'logout'].includes(message.toLowerCase())) {
-            // These commands will be handled below, no need to check authentication
-        } else if (!this.isConnected || !this.isAuthenticated) {
-            console.log(ColorUtils.error('❌ Authentication required. Please use the "login" command to continue.'));
-            this.rl.prompt();
-            return;
-        }
-
-        // Handle special commands
-        if (['quit', 'exit', 'bye'].includes(message.toLowerCase())) {
-            console.log(ColorUtils.success('👋 Goodbye!'));
-            this.rl.close();
-            process.exit(0);
-            return;
-        }
-
-        if (message.toLowerCase() === 'clear') {
-            await this.clearConversationHistory();
-            return;
-        }
-
-        if (message.toLowerCase() === 'history') {
-            await this.showConversationHistory();
-            return;
-        }
-
-        if (message.toLowerCase() === 'cancel') {
-            if (this.isProcessingRequest) {
-                this.requestInterrupt();
-                console.log(ColorUtils.success('✅ Request cancelled successfully.'));
-            } else {
-                console.log(ColorUtils.info('ℹ️  No active request to cancel.'));
+        // Handle commands (starting with '/')
+        if (this.isCommand(message)) {
+            // Strip the '/' prefix for command processing and use the rest as the original message
+            message = message.substring(1).trim();
+            
+            // Allow login and logout commands even when not authenticated
+            if (['login', 'logout'].includes(message.toLowerCase())) {
+                // These commands will be handled below, no need to check authentication
+            } else if (!this.isConnected || !this.isAuthenticated) {
+                console.log(ColorUtils.error('❌ Authentication required. Please use the "/login" command to continue.'));
+                this.rl.prompt();
+                return;
             }
-            this.rl.prompt();
-            return;
-        }
 
-        if (message.toLowerCase() === 'status') {
-            if (this.isProcessingRequest) {
-                console.log(ColorUtils.info('🔄 Currently processing AI request...'));
-            } else {
-                console.log(ColorUtils.success('✅ No active requests. Ready for new input.'));
+            // Handle special commands
+            if (['quit', 'exit', 'bye'].includes(message.toLowerCase())) {
+                console.log(ColorUtils.success('👋 Goodbye!'));
+                this.rl.close();
+                process.exit(0);
+                return;
             }
-            this.rl.prompt();
-            return;
-        }
 
-        if (message.toLowerCase().startsWith('autocancel ')) {
+            if (message.toLowerCase() === 'clear') {
+                await this.clearConversationHistory();
+                return;
+            }
+
+            if (message.toLowerCase() === 'history') {
+                await this.showConversationHistory();
+                return;
+            }
+
+            if (message.toLowerCase() === 'cancel') {
+                if (this.isProcessingRequest) {
+                    this.requestInterrupt();
+                    console.log(ColorUtils.success('✅ Request cancelled successfully.'));
+                } else {
+                    console.log(ColorUtils.info('ℹ️  No active request to cancel.'));
+                }
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase() === 'status') {
+                if (this.isProcessingRequest) {
+                    console.log(ColorUtils.info('🔄 Currently processing AI request...'));
+                } else {
+                    console.log(ColorUtils.success('✅ No active requests. Ready for new input.'));
+                }
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('autocancel ')) {
             const parts = message.split(' ');
             if (parts.length === 2) {
                 const setting = parts[1].toLowerCase();
@@ -456,124 +457,150 @@ export class ChatClient {
             return;
         }
 
-        if (message.toLowerCase() === 'test-nonstream') {
-            this.testNonStreamingCancellation();
-            return;
-        }
-
-        if (message.toLowerCase() === 'models') {
-            await this.listAvailableModels();
-            return;
-        }
-
-        if (message.toLowerCase() === 'model') {
-            await this.showCurrentModel();
-            return;
-        }
-
-        if (message.toLowerCase() === 'json') {
-            console.log(ColorUtils.info(`📋 JSON output mode: ${this.jsonOutputMode ? ColorUtils.success('enabled') : ColorUtils.info('disabled')}`));
-            this.rl.prompt();
-            return;
-        }
-
-        if (message.toLowerCase() === 'reasoning') {
-            console.log(ColorUtils.info(`🧠 Reasoning: ${this.reasoningEnabled ? ColorUtils.success('enabled') : ColorUtils.info('disabled')}`));
-            this.rl.prompt();
-            return;
-        }
-
-        if (message.toLowerCase() === 'streaming') {
-            console.log(ColorUtils.info(`📡 Streaming: ${this.streamingEnabled ? ColorUtils.success('enabled') : ColorUtils.info('disabled')}`));
-            this.rl.prompt();
-            return;
-        }
-
-        if (message.toLowerCase() === 'verbose') {
-            console.log(ColorUtils.info(`🔍 Verbose mode: ${this.verboseMode ? ColorUtils.success('enabled') : ColorUtils.info('disabled')}`));
-            this.rl.prompt();
-            return;
-        }
-
-        if (message.toLowerCase().startsWith('reasoning on')) {
-            this.reasoningEnabled = true;
-            console.log(ColorUtils.success('✅ Reasoning enabled (reasoning content will be silently ignored)'));
-            this.rl.prompt();
-            return;
-        }
-
-        if (message.toLowerCase().startsWith('reasoning off')) {
-            this.reasoningEnabled = false;
-            console.log(ColorUtils.success('✅ Reasoning disabled'));
-            this.rl.prompt();
-            return;
-        }
-
-        if (message.toLowerCase().startsWith('streaming on')) {
-            this.streamingEnabled = true;
-            this.updatePrompt(); // Update prompt to show new streaming status
-            console.log(ColorUtils.success('✅ Streaming enabled'));
-            this.rl.prompt();
-            return;
-        }
-
-        if (message.toLowerCase().startsWith('streaming off')) {
-            this.streamingEnabled = false;
-            this.updatePrompt(); // Update prompt to show new streaming status
-            console.log(ColorUtils.success('✅ Streaming disabled'));
-            this.rl.prompt();
-            return;
-        }
-
-        if (message.toLowerCase().startsWith('verbose on')) {
-            this.verboseMode = true;
-            this.updatePrompt(); // Update prompt to show new verbose status
-            console.log(ColorUtils.success('✅ Verbose mode enabled - HTTP requests and responses will be logged'));
-            this.rl.prompt();
-            return;
-        }
-
-        if (message.toLowerCase().startsWith('verbose off')) {
-            this.verboseMode = false;
-            this.updatePrompt(); // Update prompt to show new verbose status
-            console.log(ColorUtils.success('✅ Verbose mode disabled'));
-            this.rl.prompt();
-            return;
-        }
-
-        if (message.toLowerCase().startsWith('model ')) {
-            const modelInput = message.substring(6).trim();
-            await this.switchModel(modelInput);
-            return;
-        }
-
-        if (message.toLowerCase() === 'clear model' || message.toLowerCase() === 'reset model') {
-            await this.clearModelPreference();
-            return;
-        }
-
-        if (message.toLowerCase().startsWith('attach ')) {
-            const imageUrl = message.substring(7).trim();
-            await this.fetchImage(imageUrl);
-            return;
-        }
-
-        if (message.toLowerCase() === 'cmdhistory') {
-            if (this.commandHistory.length === 0) {
-                console.log(ColorUtils.info('📝 No command history yet.'));
-            } else {
-                console.log(ColorUtils.info('📝 Command History:'));
-                this.commandHistory.forEach((cmd, index) => {
-                    console.log(`  ${index + 1}. ${ColorUtils.system(cmd)}`);
-                });
+            if (message.toLowerCase() === 'test-nonstream') {
+                this.testNonStreamingCancellation();
+                return;
             }
-            this.rl.prompt();
-            return;
-        }
+
+            if (message.toLowerCase() === 'models') {
+                await this.listAvailableModels();
+                return;
+            }
+
+            if (message.toLowerCase() === 'model') {
+                await this.showCurrentModel();
+                return;
+            }
+
+            if (message.toLowerCase() === 'json') {
+                console.log(ColorUtils.info(`📋 JSON output mode: ${this.jsonOutputMode ? ColorUtils.success('enabled') : ColorUtils.info('disabled')}`));
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase() === 'reasoning') {
+                console.log(ColorUtils.info(`🧠 Reasoning: ${this.reasoningEnabled ? ColorUtils.success('enabled') : ColorUtils.info('disabled')}`));
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase() === 'streaming') {
+                console.log(ColorUtils.info(`📡 Streaming: ${this.streamingEnabled ? ColorUtils.success('enabled') : ColorUtils.info('disabled')}`));
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase() === 'verbose') {
+                console.log(ColorUtils.info(`🔍 Verbose mode: ${this.verboseMode ? ColorUtils.success('enabled') : ColorUtils.info('disabled')}`));
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase() === 'messagebody') {
+                console.log(ColorUtils.info(`📝 Message body: ${this.messageBodyEnabled ? ColorUtils.success('enabled') : ColorUtils.info('disabled')}`));
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('reasoning on')) {
+                this.reasoningEnabled = true;
+                this.updatePrompt(); // Update prompt to show new reasoning status
+                console.log(ColorUtils.success('✅ Reasoning enabled - AI thinking process will be displayed in real-time'));
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('reasoning off')) {
+                this.reasoningEnabled = false;
+                this.updatePrompt(); // Update prompt to show new reasoning status
+                console.log(ColorUtils.success('✅ Reasoning disabled'));
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('streaming on')) {
+                this.streamingEnabled = true;
+                this.updatePrompt(); // Update prompt to show new streaming status
+                console.log(ColorUtils.success('✅ Streaming enabled'));
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('streaming off')) {
+                this.streamingEnabled = false;
+                this.updatePrompt(); // Update prompt to show new streaming status
+                console.log(ColorUtils.success('✅ Streaming disabled'));
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('verbose on')) {
+                this.verboseMode = true;
+                this.updatePrompt(); // Update prompt to show new verbose status
+                console.log(ColorUtils.success('✅ Verbose mode enabled - HTTP requests and responses will be logged'));
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('verbose off')) {
+                this.verboseMode = false;
+                this.updatePrompt(); // Update prompt to show new verbose status
+                console.log(ColorUtils.success('✅ Verbose mode disabled'));
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('messagebody on')) {
+                this.messageBodyEnabled = true;
+                await this.chatServerModuleProxy.setLLMDebugMode(true);
+                this.updatePrompt(); // Update prompt to show new message body status
+                console.log(ColorUtils.success('✅ Message body debug enabled - LLM request body will be logged'));
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('messagebody off')) {
+                this.messageBodyEnabled = false;
+                await this.chatServerModuleProxy.setLLMDebugMode(false);
+                this.updatePrompt(); // Update prompt to show new message body status
+                console.log(ColorUtils.success('✅ Message body debug disabled - LLM request body logging turned off'));
+                this.rl.prompt();
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('model ')) {
+                const modelInput = message.substring(6).trim();
+                await this.switchModel(modelInput);
+                return;
+            }
+
+            if (message.toLowerCase() === 'clear model' || message.toLowerCase() === 'reset model') {
+                await this.clearModelPreference();
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('attach ')) {
+                const imageUrl = message.substring(7).trim();
+                await this.fetchImage(imageUrl);
+                return;
+            }
+
+            if (message.toLowerCase() === 'cmdhistory') {
+                if (this.commandHistory.length === 0) {
+                    console.log(ColorUtils.info('📝 No command history yet.'));
+                } else {
+                    console.log(ColorUtils.info('📝 Command History:'));
+                    this.commandHistory.forEach((cmd, index) => {
+                        console.log(`  ${index + 1}. ${ColorUtils.system(cmd)}`);
+                    });
+                }
+                this.rl.prompt();
+                return;
+            }
 
         if (message.toLowerCase() === 'help') {
-            console.log(ColorUtils.info('📖 Available Commands:'));
-            console.log(ColorUtils.system('  quit/exit/bye - End the chat session'));
+            console.log(ColorUtils.info('📖 Available Commands (all commands must start with "/"):'));
+            console.log(ColorUtils.system('  /quit, /exit, /bye - End the chat session'));
             console.log(ColorUtils.system('  clear         - Clear conversation history (server-side)'));
             console.log(ColorUtils.system('  history       - Show conversation history (server-side)'));
             console.log(ColorUtils.system('  convstats     - Show conversation statistics'));
@@ -584,12 +611,12 @@ export class ChatClient {
             console.log(ColorUtils.system('  forcecleanup - Force cleanup with default settings'));
             console.log(ColorUtils.system('  cmdhistory    - Show command history (arrow key navigation)'));
             console.log(ColorUtils.system('  system <prompt> - Set system prompt'));
-            console.log(ColorUtils.system('  color <ai|user> <color> - Change colors'));
+            console.log(ColorUtils.system('  color <ai|user|reasoning> <color> - Change colors'));
             console.log(ColorUtils.system('  markdown on|off - Toggle markdown parsing'));
             console.log(ColorUtils.system('  json on|off   - Toggle JSON output mode'));
             console.log(ColorUtils.system('  json          - Show current JSON output mode status'));
             console.log(ColorUtils.system('  reasoning     - Show current reasoning status'));
-            console.log(ColorUtils.system('  reasoning on  - Enable reasoning (content hidden)'));
+            console.log(ColorUtils.system('  reasoning on  - Enable reasoning (AI thinking displayed)'));
             console.log(ColorUtils.system('  reasoning off - Disable reasoning'));
             console.log(ColorUtils.system('  streaming     - Show current streaming status'));
             console.log(ColorUtils.system('  streaming on  - Enable streaming responses'));
@@ -597,6 +624,9 @@ export class ChatClient {
             console.log(ColorUtils.system('  verbose       - Show current verbose status'));
             console.log(ColorUtils.system('  verbose on    - Enable verbose mode (HTTP logging)'));
             console.log(ColorUtils.system('  verbose off   - Disable verbose mode'));
+            console.log(ColorUtils.system('  messagebody   - Show current message body status'));
+            console.log(ColorUtils.system('  messagebody on - Enable message body (send full content to LLM)'));
+            console.log(ColorUtils.system('  messagebody off - Disable message body (send only metadata to LLM)'));
             console.log(ColorUtils.system('  cancel        - Cancel current AI response'));
             console.log(ColorUtils.system('  status        - Show current request status'));
             console.log(ColorUtils.system('  autocancel on|off - Toggle auto-cancellation'));
@@ -700,12 +730,15 @@ export class ChatClient {
                 } else if (target === 'user') {
                     ChatConfigManager.setUserMessageColor(color);
                     console.log(ColorUtils.success(`✅ User message color changed to ${color}`));
+                } else if (target === 'reasoning') {
+                    ChatConfigManager.setReasoningColor(color);
+                    console.log(ColorUtils.success(`✅ Reasoning color changed to ${color}`));
                 } else {
-                    console.log(ColorUtils.error('❌ Invalid target. Use "ai" or "user"'));
+                    console.log(ColorUtils.error('❌ Invalid target. Use "ai", "user", or "reasoning"'));
                 }
             } else {
-                console.log(ColorUtils.error('❌ Usage: color <ai|user> <color>'));
-                console.log(ColorUtils.info('Example: color ai brightGreen'));
+                console.log(ColorUtils.error('❌ Usage: color <ai|user|reasoning> <color>'));
+                console.log(ColorUtils.info('Example: color reasoning brightBlue'));
             }
             this.rl.prompt();
             return;
@@ -739,9 +772,11 @@ export class ChatClient {
                 
                 if (setting === 'on') {
                     this.jsonOutputMode = true;
+                    this.updatePrompt(); // Update prompt to show new JSON status
                     console.log(ColorUtils.success('✅ JSON output mode enabled'));
                 } else if (setting === 'off') {
                     this.jsonOutputMode = false;
+                    this.updatePrompt(); // Update prompt to show new JSON status
                     console.log(ColorUtils.success('✅ JSON output mode disabled'));
                 } else {
                     console.log(ColorUtils.error('❌ Usage: json <on|off>'));
@@ -752,11 +787,16 @@ export class ChatClient {
             this.rl.prompt();
             return;
         }
+        }
 
-        // Note: Conversation history is now managed server-side via DialogueJournal
-        // No need to add user message to local history
-
-        await this.processAiResponse(message);
+        // Only process as chat message if it's not a command
+        // Commands starting with '/' should never be sent to the server
+        if (!this.isCommand(message)) {
+            await this.processAiResponse(message);
+        }
+        
+        // Update prompt after any command to reflect current state
+        this.updatePrompt();
     }
 
     /**
@@ -932,36 +972,43 @@ export class ChatClient {
             this.isProcessingRequest = true;
             this.updatePrompt();
             
+            // Conditionally modify message based on messageBodyEnabled setting
+            const processedMessage = this.messageBodyEnabled ? message : `[Message metadata only - body disabled] Original length: ${message.length} characters`;
+            
             let aiResponse = '';
             
             if (this.streamingEnabled) {
-                // Get AI response with streaming directly (no makeRequest wrapper for streams)
-                // Server now manages conversation history via DialogueJournal
-                const responseGenerator = await this.chatServerModuleProxy.chatWithHistory(
-                    message, 
-                    {
-                        jsonOutput: this.jsonOutputMode,
-                        reasoningEnabled: this.reasoningEnabled
-                    }
-                );
+                if (this.reasoningEnabled) {
+                    // Use new SimpleStreamPacket streaming for reasoning display
+                    await this.processAiResponseWithReasoning(processedMessage);
+                } else {
+                    // Use traditional text streaming
+                    const responseGenerator = await this.chatServerModuleProxy.chatWithHistory(
+                        processedMessage, 
+                        {
+                            jsonOutput: this.jsonOutputMode,
+                            reasoningEnabled: this.reasoningEnabled
+                        }
+                    );
 
-                for await (const text of responseGenerator) {
-                    // Only check for interrupt request (not isProcessingRequest since we manage it here)
-                    if (this.interruptRequested) {
-                        console.log(ColorUtils.info('\n🔄 Response interrupted.'));
-                        break;
+                    for await (const text of responseGenerator) {
+                        // Only check for interrupt request (not isProcessingRequest since we manage it here)
+                        if (this.interruptRequested) {
+                            console.log(ColorUtils.info('\n🔄 Response interrupted.'));
+                            break;
+                        }
+                        
+                        // Simply apply AI color to each chunk as it comes in
+                        // We'll parse markdown after the full response is complete
+                        process.stdout.write(ColorUtils.ai(text));
+                        aiResponse += text;
                     }
-                    
-                    // Simply apply AI color to each chunk as it comes in
-                    // We'll parse markdown after the full response is complete
-                    process.stdout.write(ColorUtils.ai(text));
-                    aiResponse += text;
                 }
             } else {
                 // Use non-streaming approach
                 const response = await this.makeRequest(async () => {
                     return await this.chatServerModuleProxy.chatNonStreaming(
-                        message,
+                        processedMessage,
                         this.systemPrompt || "You are a helpful AI assistant. Maintain conversation context and provide relevant responses."
                     );
                 });
@@ -995,6 +1042,89 @@ export class ChatClient {
             
             console.log(''); // Empty line for readability
             this.rl.prompt();
+        }
+    }
+
+    /**
+     * Processes AI response with reasoning display using SimpleStreamPacket
+     */
+    private async processAiResponseWithReasoning(message: string): Promise<void> {
+        try {
+            // Conditionally modify message based on messageBodyEnabled setting
+            const processedMessage = this.messageBodyEnabled ? message : `[Message metadata only - body disabled] Original length: ${message.length} characters`;
+            
+            // Get AI response with reasoning streaming
+            // Use the new postChatWithReasoning RPC method
+            const responseGenerator = await this.chatServerModuleProxy.postChatWithReasoning(
+                processedMessage, 
+                {
+                    jsonOutput: this.jsonOutputMode,
+                    reasoningEnabled: this.reasoningEnabled
+                }
+            );
+
+            let aiResponse = '';
+            let aiReasoning = '';
+            let reasoningBuffer = '';
+            let contentBuffer = '';
+            let hasReceivedReasoning = false;
+            let hasStartedContent = false;
+
+            for await (const packet of responseGenerator) {
+                // Only check for interrupt request
+                if (this.interruptRequested) {
+                    console.log(ColorUtils.info('\n🔄 Response interrupted.'));
+                    break;
+                }
+
+                // Handle reasoning content
+                if (packet.reasoning) {
+                    reasoningBuffer += packet.reasoning;
+                    aiReasoning += packet.reasoning;
+                    hasReceivedReasoning = true;
+                    
+                    // Display reasoning in a different color/style
+                    process.stdout.write(ColorUtils.reasoning(packet.reasoning));
+                }
+
+                // Handle main content
+                if (packet.content) {
+                    // If we've received reasoning before and this is the first content, start on a new line
+                    if (hasReceivedReasoning && !hasStartedContent) {
+                        console.log(''); // New line to separate reasoning from content
+                        hasStartedContent = true;
+                    }
+                    
+                    contentBuffer += packet.content;
+                    aiResponse += packet.content;
+                    
+                    // Display content with AI color
+                    process.stdout.write(ColorUtils.ai(packet.content));
+                }
+
+                // Handle errors
+                if (packet.source === 'error') {
+                    console.log(ColorUtils.error('\n❌ Error: ' + packet.content));
+                    break;
+                }
+            }
+
+            // Finalize any remaining content
+            if (reasoningBuffer.trim()) {
+                console.log(''); // New line after reasoning
+            }
+
+        } catch (error) {
+            if (error instanceof Error && (
+                error.message === 'Request was cancelled' || 
+                error.name === 'AbortError' ||
+                error.message === 'The operation was aborted.'
+            )) {
+                console.log(ColorUtils.info('🔄 Request cancelled by user.'));
+            } else {
+                console.error(ColorUtils.error('❌ Error getting AI response with reasoning:'), error);
+                console.log(ColorUtils.aiPrompt() + ColorUtils.error('Sorry, I encountered an error. Please try again.'));
+            }
         }
     }
 
@@ -1334,17 +1464,17 @@ export class ChatClient {
      */
     private async clearConversationHistory(): Promise<void> {
         try {
-            console.log(ColorUtils.info('📦 Archiving current conversation...'));
+            console.log(ColorUtils.info('🧹 Clearing conversation history...'));
             
-            const success = await this.chatServerModuleProxy.archiveCurrentConversation();
+            const success = await this.chatServerModuleProxy.clearCurrentConversation();
             
             if (success) {
-                console.log(ColorUtils.success('✅ Conversation archived successfully'));
+                console.log(ColorUtils.success('✅ Conversation history cleared successfully'));
             } else {
-                console.log(ColorUtils.error('❌ Failed to archive conversation'));
+                console.log(ColorUtils.error('❌ Failed to clear conversation history'));
             }
         } catch (error) {
-            console.error(ColorUtils.error('❌ Failed to archive conversation:'), error);
+            console.error(ColorUtils.error('❌ Failed to clear conversation history:'), error);
         }
         
         this.rl.prompt();

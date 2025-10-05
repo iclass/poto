@@ -3,6 +3,7 @@ export interface ChatConfig {
     colors: {
         aiResponse: 'brightCyan' | 'brightGreen' | 'brightYellow' | 'brightMagenta' | 'brightBlue' | 'brightRed' | 'cyan' | 'green' | 'yellow' | 'magenta' | 'blue' | 'red';
         userMessage: 'brightBlue' | 'brightGreen' | 'brightYellow' | 'brightMagenta' | 'brightCyan' | 'brightRed' | 'blue' | 'green' | 'yellow' | 'magenta' | 'cyan' | 'red';
+        reasoning: 'gray' | 'white' | 'brightMagenta' | 'brightCyan' | 'brightBlue' | 'magenta' | 'cyan' | 'blue';
         success: 'brightGreen' | 'green';
         error: 'brightRed' | 'red';
         warning: 'brightYellow' | 'yellow';
@@ -18,6 +19,7 @@ export const defaultConfig: ChatConfig = {
     colors: {
         aiResponse: 'brightCyan',
         userMessage: 'brightBlue',
+        reasoning: 'gray',
         success: 'brightGreen',
         error: 'brightRed',
         warning: 'brightYellow',
@@ -47,6 +49,10 @@ export class ChatConfigManager {
 
     static setUserMessageColor(color: ChatConfig['colors']['userMessage']): void {
         globalConfig.colors.userMessage = color;
+    }
+
+    static setReasoningColor(color: ChatConfig['colors']['reasoning']): void {
+        globalConfig.colors.reasoning = color;
     }
 
     static enableColors(enabled: boolean): void {

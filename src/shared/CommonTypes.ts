@@ -123,3 +123,6 @@ export function generatorToSseStream<T>(
 		new TextEncoder().encode(`data: ${JSON.stringify(item)}\n\n`)
 	);
 }
+
+// Re-export SimpleStreamPacket for convenience
+export { SimpleStreamPacket } from './SimpleStreamPacket';

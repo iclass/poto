@@ -5,6 +5,7 @@ import { UserSessionData } from "../server/UserSessionProvider";
 import { DialogueJournal, ChatMessage } from "../server/DialogueJournal";
 import { PotoUser } from "../server/UserProvider";
 import { DialogueJournalFactory } from "../server/DialogueJournalFactory";
+import { SimpleStreamPacket } from "../shared/SimpleStreamPacket";
 
 // Model information interface
 export interface ModelInfo {
@@ -415,7 +416,7 @@ export class LLMPotoModule extends PotoModule {
 			llm.user(message);
 
 			// Stream the response
-			for await (const text of await llm.requestCompletionTextGenerator_()) {
+			for await (const text of await llm.requestCompletionTextGenerator_(3000)) {
 				yield text;
 			}
 		} catch (error) {
@@ -471,7 +472,7 @@ export class LLMPotoModule extends PotoModule {
 			llm.user(message);
 
 			// Stream the response and capture metadata
-			const stream = await llm.requestCompletionStream_();
+			const stream = await llm.requestCompletionStream_(3000);
 			const reader = stream.getReader();
 			let tokenUsage: any = null;
 			let finishReason = 'unknown';
@@ -541,6 +542,171 @@ export class LLMPotoModule extends PotoModule {
 					error: err.message
 				}
 			};
+		}
+	}
+
+	/**
+	 * Enhanced LLM streaming with SimpleStreamPacket support
+	 * This method provides unified handling of both thinking and content channels
+	 * Returns SimpleStreamPacket objects that can be easily consumed by frontend
+	 */
+	protected async *streamLLMWithSimplePackets(
+		message: string,
+		history: Array<{ role: 'user' | 'assistant'; content: string }>,
+		options: {
+			jsonOutput?: boolean;
+			reasoningEnabled?: boolean;
+			systemPrompt?: string;
+		} = {}
+	): AsyncGenerator<SimpleStreamPacket> {
+		try {
+			// Get cancellation-aware LLM instance with user-specific model from session
+			const llm = await this.getUserPreferredLLM();
+			llm.clearFormat();
+			
+			// Set JSON output format if requested
+			if (options.jsonOutput) {
+				llm.responseFormat = 'json_object';
+			}
+			
+			// Set reasoning enabled/disabled
+			llm.setReasoningEnabled(options.reasoningEnabled || false);
+			
+			// Set system prompt based on output mode
+			if (options.systemPrompt) {
+				llm.system(options.systemPrompt);
+			} else if (options.jsonOutput) {
+				llm.system("You are a helpful AI assistant. Always respond with valid JSON format. Structure your responses as JSON objects with appropriate fields. Maintain conversation context and provide relevant responses.");
+			} else {
+				llm.system("You are a helpful AI assistant. Maintain conversation context and provide relevant responses.");
+			}
+
+			// Load conversation history into LLM context
+			for (const msg of history) {
+				if (msg.role === 'user') {
+					llm.user(msg.content);
+				} else {
+					llm.assistant(msg.content);
+				}
+			}
+
+			// Add current message
+			llm.user(message);
+
+			// Stream the response and convert to StreamPackets
+			const stream = await llm.requestCompletionStream_(3000);
+			const reader = stream.getReader();
+			
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+
+					// Convert StreamingChunk to StreamPacket
+					const packet = value.toStreamPacket();
+					
+					// Only yield packets that have content
+					if (packet.hasContent()) {
+						yield packet;
+					}
+				}
+			} finally {
+				reader.releaseLock();
+			}
+		} catch (error) {
+			const err = error as Error;
+			// Return error as a SimpleStreamPacket
+			yield new SimpleStreamPacket('error', '', `Error: ${err.message}`);
+		}
+	}
+
+	/**
+	 * Enhanced chat with SimpleStreamPacket support for reasoning display
+	 * This method provides both content and reasoning streams to the frontend
+	 */
+	async *chatWithReasoning(
+		message: string, 
+		options: {
+			jsonOutput?: boolean;
+			reasoningEnabled?: boolean;
+			systemPrompt?: string;
+		} = {}
+	): AsyncGenerator<SimpleStreamPacket> {
+		const startTime = Date.now();
+		let firstTokenTime: number | null = null;
+		
+		try {
+			// Get current user
+			const user = await this.getCurrentUser();
+			if (!user) {
+				yield new SimpleStreamPacket('error', '', 'User not authenticated');
+				return;
+			}
+			
+			// Update user activity if session monitoring is enabled
+			if (this.enableSessionMonitoring) {
+				this.updateUserActivity(user.id);
+			}
+			
+			// Load conversation history from dialogue journal or use empty array
+			const history = this.dialogueJournal 
+				? await this.dialogueJournal.getConversation(user)
+				: [];
+			
+			// Use the new SimpleStreamPacket streaming method
+			let aiResponse = '';
+			let aiReasoning = '';
+			
+			for await (const packet of this.streamLLMWithSimplePackets(message, history, {
+				jsonOutput: options.jsonOutput,
+				reasoningEnabled: options.reasoningEnabled,
+				systemPrompt: options.systemPrompt
+			})) {
+				if (firstTokenTime === null) {
+					firstTokenTime = Date.now();
+				}
+				
+				// Accumulate content and reasoning
+				aiResponse += packet.content;
+				aiReasoning += packet.reasoning;
+				
+				// Yield the packet to the frontend
+				yield packet;
+			}
+			
+			// Add both user message and AI response to dialogue journal if available
+			if (this.dialogueJournal) {
+				// Add user message first
+				await this.dialogueJournal.addMessage(user, { 
+					role: 'user', 
+					content: message,
+					timestamp: new Date().toISOString()
+				});
+				
+				// Add AI response with enhanced metadata if we have content
+				if (aiResponse.trim()) {
+					// Calculate performance metrics
+					const processingTime = Date.now() - startTime;
+					const firstTokenLatency = firstTokenTime ? firstTokenTime - startTime : 0;
+					
+					await this.dialogueJournal.addMessage(user, { 
+						role: 'assistant', 
+						content: aiResponse,
+						timestamp: new Date().toISOString(),
+						metadata: {
+							reasoning: aiReasoning,
+							performance: {
+								processingTimeMs: processingTime,
+								firstTokenLatencyMs: firstTokenLatency,
+								tokensPerSecond: 0 // SimpleStreamPacket doesn't provide token usage
+							}
+						}
+					});
+				}
+			}
+		} catch (error) {
+			const err = error as Error;
+			yield new SimpleStreamPacket('error', '', `Error: ${err.message}`);
 		}
 	}
 
