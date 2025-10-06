@@ -2,7 +2,7 @@ import { PotoUser } from "./UserProvider";
 
 // Enhanced ChatMessage interface with nested metadata structure
 export interface ChatMessage {
-    role: 'user' | 'assistant';
+    role: 'user' | 'assistant' | 'system';
     content: string;
     timestamp: string;
     metadata?: {
@@ -39,6 +39,9 @@ export interface ChatMessage {
             finishReason: string;
             responseId: string;
         };
+        
+        // Session information
+        sessionId?: string;
     };
 }
 
@@ -96,10 +99,10 @@ export interface ConversationSummary {
  */
 export interface DialogueJournal {
     // Core operations
-    getConversation(user: PotoUser): Promise<ChatMessage[]>;
-    addMessage(user: PotoUser, message: ChatMessage): Promise<void>;
-    addMessages(user: PotoUser, messages: ChatMessage[]): Promise<void>;
-    clearConversation(user: PotoUser): Promise<void>;
+    getConversation(user: PotoUser, sessionId?: string): Promise<ChatMessage[]>;
+    addMessage(user: PotoUser, message: ChatMessage, sessionId?: string): Promise<void>;
+    addMessages(user: PotoUser, messages: ChatMessage[], sessionId?: string): Promise<void>;
+    clearConversation(user: PotoUser, sessionId?: string): Promise<void>;
     
     // Advanced operations (not applicable to memory-based journal)
     archiveConversation?(user: PotoUser, conversationId?: string): Promise<string>;
@@ -115,10 +118,10 @@ export interface DialogueJournal {
     importConversation(user: PotoUser, data: string, format: 'json' | 'csv'): Promise<boolean>;
     
     // Utility methods
-    getConversationLength(user: PotoUser): Promise<number>;
-    getRecentMessages(user: PotoUser, count: number): Promise<ChatMessage[]>;
-    hasActiveConversation(user: PotoUser): Promise<boolean>;
-    getConversationSummary(user: PotoUser): Promise<ConversationSummary>;
+    getConversationLength(user: PotoUser, sessionId?: string): Promise<number>;
+    getRecentMessages(user: PotoUser, count: number, sessionId?: string): Promise<ChatMessage[]>;
+    hasActiveConversation(user: PotoUser, sessionId?: string): Promise<boolean>;
+    getConversationSummary(user: PotoUser, sessionId?: string): Promise<ConversationSummary>;
 }
 
 /**
@@ -144,33 +147,33 @@ export abstract class BaseDialogueJournal implements DialogueJournal {
     }
 
     // Abstract methods to be implemented by subclasses
-    abstract getConversation(user: PotoUser): Promise<ChatMessage[]>;
-    abstract addMessage(user: PotoUser, message: ChatMessage): Promise<void>;
-    abstract addMessages(user: PotoUser, messages: ChatMessage[]): Promise<void>;
-    abstract clearConversation(user: PotoUser): Promise<void>;
+    abstract getConversation(user: PotoUser, sessionId?: string): Promise<ChatMessage[]>;
+    abstract addMessage(user: PotoUser, message: ChatMessage, sessionId?: string): Promise<void>;
+    abstract addMessages(user: PotoUser, messages: ChatMessage[], sessionId?: string): Promise<void>;
+    abstract clearConversation(user: PotoUser, sessionId?: string): Promise<void>;
     abstract getStats(): Promise<DialogueJournalStats>;
     abstract cleanup(options: CleanupOptions): Promise<CleanupResult>;
     abstract exportConversation(user: PotoUser, format: 'json' | 'csv'): Promise<string>;
     abstract importConversation(user: PotoUser, data: string, format: 'json' | 'csv'): Promise<boolean>;
 
     // Common utility methods
-    async getConversationLength(user: PotoUser): Promise<number> {
-        const conversation = await this.getConversation(user);
+    async getConversationLength(user: PotoUser, sessionId?: string): Promise<number> {
+        const conversation = await this.getConversation(user, sessionId);
         return conversation.length;
     }
 
-    async getRecentMessages(user: PotoUser, count: number): Promise<ChatMessage[]> {
-        const conversation = await this.getConversation(user);
+    async getRecentMessages(user: PotoUser, count: number, sessionId?: string): Promise<ChatMessage[]> {
+        const conversation = await this.getConversation(user, sessionId);
         return conversation.slice(-count);
     }
 
-    async hasActiveConversation(user: PotoUser): Promise<boolean> {
-        const conversation = await this.getConversation(user);
+    async hasActiveConversation(user: PotoUser, sessionId?: string): Promise<boolean> {
+        const conversation = await this.getConversation(user, sessionId);
         return conversation.length > 0;
     }
 
-    async getConversationSummary(user: PotoUser): Promise<ConversationSummary> {
-        const conversation = await this.getConversation(user);
+    async getConversationSummary(user: PotoUser, sessionId?: string): Promise<ConversationSummary> {
+        const conversation = await this.getConversation(user, sessionId);
         
         if (conversation.length === 0) {
             return {
@@ -194,7 +197,7 @@ export abstract class BaseDialogueJournal implements DialogueJournal {
 
     // Validation helpers
     protected validateMessage(message: ChatMessage): void {
-        if (!message.role || !['user', 'assistant'].includes(message.role)) {
+        if (!message.role || !['user', 'assistant', 'system'].includes(message.role)) {
             throw new Error('Invalid message role');
         }
         if (!message.content || typeof message.content !== 'string') {

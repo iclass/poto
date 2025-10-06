@@ -30,7 +30,7 @@
 	"scripts": {
 		"quickchat": "bun genericChatCli/client/ChatClient.ts",
 		"chat-server": "bun --hot genericChatCli/start-server.ts",
-		"chat-client": "bun --hot genericChatCli/start-client.ts",
+		"chat-client": "bun genericChatCli/start-client.ts",
 		"build": "bun run build:clean && bun run build:compile",
 		"build:clean": "rimraf dist",
 		"build:compile": "bun run tsc",

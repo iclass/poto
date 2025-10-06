@@ -33,21 +33,23 @@ export class VolatileMemoryDialogueJournal extends BaseDialogueJournal {
     /**
      * Get user's conversation history
      */
-    async getConversation(user: PotoUser): Promise<ChatMessage[]> {
+    async getConversation(user: PotoUser, sessionId?: string): Promise<ChatMessage[]> {
         this.validateUser(user);
         const userId = user.id;
-        return this.conversations.get(userId) || [];
+        const key = sessionId ? `${userId}-${sessionId}` : userId;
+        return this.conversations.get(key) || [];
     }
 
     /**
      * Add a message to user's conversation
      */
-    async addMessage(user: PotoUser, message: ChatMessage): Promise<void> {
+    async addMessage(user: PotoUser, message: ChatMessage, sessionId?: string): Promise<void> {
         this.validateUser(user);
         this.validateMessage(message);
         
         const userId = user.id;
-        let conversation = this.conversations.get(userId) || [];
+        const key = sessionId ? `${userId}-${sessionId}` : userId;
+        let conversation = this.conversations.get(key) || [];
         
         // Add timestamp if not present
         const messageWithTimestamp: ChatMessage = {
@@ -65,18 +67,19 @@ export class VolatileMemoryDialogueJournal extends BaseDialogueJournal {
             conversation = conversation.slice(-this.maxConversationLength);
         }
         
-        this.conversations.set(userId, conversation);
+        this.conversations.set(key, conversation);
     }
 
     /**
      * Add multiple messages to user's conversation
      */
-    async addMessages(user: PotoUser, messages: ChatMessage[]): Promise<void> {
+    async addMessages(user: PotoUser, messages: ChatMessage[], sessionId?: string): Promise<void> {
         this.validateUser(user);
         messages.forEach(msg => this.validateMessage(msg));
         
         const userId = user.id;
-        let conversation = this.conversations.get(userId) || [];
+        const key = sessionId ? `${userId}-${sessionId}` : userId;
+        let conversation = this.conversations.get(key) || [];
         
         // Add timestamps to messages that don't have them
         const messagesWithTimestamps = messages.map(msg => ({
@@ -100,10 +103,11 @@ export class VolatileMemoryDialogueJournal extends BaseDialogueJournal {
     /**
      * Clear user's conversation history
      */
-    async clearConversation(user: PotoUser): Promise<void> {
+    async clearConversation(user: PotoUser, sessionId?: string): Promise<void> {
         this.validateUser(user);
         const userId = user.id;
-        this.conversations.delete(userId);
+        const key = sessionId ? `${userId}-${sessionId}` : userId;
+        this.conversations.delete(key);
     }
 
     /**
@@ -242,7 +246,7 @@ export class VolatileMemoryDialogueJournal extends BaseDialogueJournal {
                 messages = lines.slice(1).map(line => {
                     const values = line.split(',');
                     return {
-                        role: values[1] as 'user' | 'assistant',
+                        role: values[1] as 'user' | 'assistant' | 'system',
                         content: values[2].replace(/^"|"$/g, '').replace(/""/g, '"'),
                         timestamp: values[0]
                     };

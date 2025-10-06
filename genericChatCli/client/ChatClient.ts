@@ -17,7 +17,7 @@ export const port = parseInt(getAppEnv('PORT') || '3799');
 const URL = `http://localhost:${port}` 
 export class ChatClient {
     private client: PotoClient;
-    private chatServerModuleProxy: ChatServerModule;
+    private chatServerModuleProxy: ChatServerModule; // Will be typed as ChatServerModuleProxy in constructor
     private rl: readline.Interface;
     // Note: conversationHistory removed - now using server-side DialogueJournal
     private isConnected = false;
@@ -30,6 +30,7 @@ export class ChatClient {
     private isAuthenticated = false;
     private currentUser?: string;
     private verboseMode = false;
+    private currentTopicTitle?: string;
     
     // Request cancellation support - now handled by PotoClient
     private isProcessingRequest = false;
@@ -63,6 +64,8 @@ export class ChatClient {
         this.client.setVerboseCallback(() => this.verboseMode);
         
         // Use string route name instead of importing server module
+        // Define explicit interface for RPC proxy with AsyncGenerator types
+        
         this.chatServerModuleProxy = this.client.getProxy<ChatServerModule>('ChatServerModule');
         
         // Load command history from localStorage
@@ -104,6 +107,27 @@ export class ChatClient {
                     console.log(`✅ Logged in as: ${this.currentUser}`);
                     this.isAuthenticated = true;
                     this.isConnected = true;
+                    
+                    // Prompt for system prompt since login creates a new session
+                    console.log('');
+                    console.log(ColorUtils.info('🆕 A new chat session has been created. Please set a system prompt:'));
+                    const systemPrompt = await this.promptInput('Enter system prompt for this session (or press Enter for no system prompt): ');
+                    const finalSystemPrompt = systemPrompt.trim();
+                    
+                    if (finalSystemPrompt) {
+                        // Start new session on server with the system prompt
+                        const success = await this.chatServerModuleProxy.startSession(finalSystemPrompt);
+                        
+                        if (success) {
+                            console.log(ColorUtils.success('✅ Session started with system prompt'));
+                            console.log(ColorUtils.info(`🎯 System prompt: ${ColorUtils.system(finalSystemPrompt)}`));
+                        } else {
+                            console.log(ColorUtils.error('❌ Failed to set system prompt'));
+                        }
+                    } else {
+                        console.log(ColorUtils.info('ℹ️  No system prompt set - using raw model behavior'));
+                    }
+                    
                     return true;
                 } catch (error) {
                     console.log('❌ Stored credentials failed. Authentication required.');
@@ -246,17 +270,39 @@ export class ChatClient {
         }
         
         const modelInfo = this.currentModel ? this.currentModel.model : 'unknown';
-        const jsonMode = this.jsonOutputMode ? ' [JSON]' : '';
-        const reasoningMode = this.reasoningEnabled ? ' [reasoning]' : '';
-        const streamingMode = this.streamingEnabled ? ' [streaming]' : ' [non-streaming]';
-        const messageBodyMode = this.messageBodyEnabled ? ' [body]' : ' [meta]';
-        const verboseMode = this.verboseMode ? ' [verbose]' : '';
-        const userInfo = this.currentUser ? ` [👤${this.currentUser}]` : '';
+        
+        // Build emoji indicators for current state
+        const indicators: string[] = [];
+        
+        // Streaming mode
+        indicators.push(this.streamingEnabled ? '📡' : '📄');
+        
+        // Message body mode  
+        indicators.push(this.messageBodyEnabled ? '💬' : '📊');
+        
+        // JSON mode
+        if (this.jsonOutputMode) indicators.push('🔧');
+        
+        // Reasoning mode
+        if (this.reasoningEnabled) indicators.push('🧠');
+        
+        // Verbose mode
+        if (this.verboseMode) indicators.push('📝');
+        
+        // User info
+        const userInfo = this.currentUser ? `👤${this.currentUser}` : '';
+        
+        // Topic title
+        const topicInfo = this.currentTopicTitle ? `[${this.currentTopicTitle}]` : '';
+        
+        // Build clean prompt
+        const stateIndicators = indicators.join('');
+        const basePrompt = `${modelInfo} ${stateIndicators} ${userInfo} ${topicInfo}`.trim();
         
         if (this.isProcessingRequest) {
-            this.rl.setPrompt(`🔄 (Ctrl+C to interrupt) ${modelInfo}${jsonMode}${reasoningMode}${streamingMode}${messageBodyMode}${verboseMode}${userInfo} > `);
+            this.rl.setPrompt(`🔄 ${basePrompt} > `);
         } else {
-            this.rl.setPrompt(`${modelInfo}${jsonMode}${reasoningMode}${streamingMode}${messageBodyMode}${verboseMode}${userInfo} > `);
+            this.rl.setPrompt(`${basePrompt} > `);
         }
     }
 
@@ -407,13 +453,46 @@ export class ChatClient {
                 return;
             }
 
-            if (message.toLowerCase() === 'clear') {
-                await this.clearConversationHistory();
+            if (message.toLowerCase() === 'new') {
+                await this.startNewSession();
                 return;
             }
 
             if (message.toLowerCase() === 'history') {
                 await this.showConversationHistory();
+                return;
+            }
+
+            if (message.toLowerCase() === 'topics') {
+                await this.listTopics();
+                return;
+            }
+
+            if (message.toLowerCase() === 'archives') {
+                await this.listArchivedTopics();
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('archive ')) {
+                const sessionId = message.substring(8).trim();
+                await this.archiveTopic(sessionId);
+                return;
+            }
+
+            if (message.toLowerCase() === 'archive') {
+                await this.archiveCurrentTopic();
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('restore ')) {
+                const sessionId = message.substring(8).trim();
+                await this.restoreArchivedTopic(sessionId);
+                return;
+            }
+
+            if (message.toLowerCase().startsWith('delete-archive ')) {
+                const sessionId = message.substring(15).trim();
+                await this.deleteArchivedTopic(sessionId);
                 return;
             }
 
@@ -601,8 +680,14 @@ export class ChatClient {
         if (message.toLowerCase() === 'help') {
             console.log(ColorUtils.info('📖 Available Commands (all commands must start with "/"):'));
             console.log(ColorUtils.system('  /quit, /exit, /bye - End the chat session'));
-            console.log(ColorUtils.system('  clear         - Clear conversation history (server-side)'));
+            console.log(ColorUtils.system('  new           - Start new chat session (clears history and sets system prompt)'));
             console.log(ColorUtils.system('  history       - Show conversation history (server-side)'));
+            console.log(ColorUtils.system('  topics        - List all available topics/sessions'));
+            console.log(ColorUtils.system('  archives      - List archived topics'));
+            console.log(ColorUtils.system('  archive       - Archive current topic'));
+            console.log(ColorUtils.system('  archive <id>  - Archive specific topic by session ID'));
+            console.log(ColorUtils.system('  restore <id>  - Restore archived topic as new session'));
+            console.log(ColorUtils.system('  delete-archive <id> - Permanently delete archived topic'));
             console.log(ColorUtils.system('  convstats     - Show conversation statistics'));
             console.log(ColorUtils.system('  export        - Export conversation as JSON'));
             console.log(ColorUtils.system('  recent <n>   - Show recent messages (default: 10)'));
@@ -638,6 +723,18 @@ export class ChatClient {
             console.log(ColorUtils.system('  login         - Login with User ID and password'));
             console.log(ColorUtils.system('  logout        - Logout and clear stored credentials'));
             console.log(ColorUtils.system('  help          - Show this help message'));
+            console.log('');
+            console.log(ColorUtils.info('📊 Prompt Emoji Indicators:'));
+            console.log(ColorUtils.system('  📡 - Streaming mode enabled'));
+            console.log(ColorUtils.system('  📄 - Non-streaming mode'));
+            console.log(ColorUtils.system('  💬 - Message body mode (full content sent to LLM)'));
+            console.log(ColorUtils.system('  📊 - Metadata mode (only metadata sent to LLM)'));
+            console.log(ColorUtils.system('  🔧 - JSON output mode'));
+            console.log(ColorUtils.system('  🧠 - Reasoning mode (AI thinking displayed)'));
+            console.log(ColorUtils.system('  📝 - Verbose mode (HTTP logging)'));
+            console.log(ColorUtils.system('  [TopicName] - Current conversation topic title'));
+            console.log(ColorUtils.system('  👤 - Current user ID'));
+            console.log(ColorUtils.system('  🔄 - Processing request (Ctrl+C to interrupt)'));
             console.log('');
             console.log(ColorUtils.info('💡 Navigation Features:'));
             console.log(ColorUtils.system('  • Use ↑/↓ arrow keys to browse command history'));
@@ -845,6 +942,30 @@ export class ChatClient {
             console.log(ColorUtils.success(`✅ Successfully logged in as: ${this.currentUser}`));
             console.log(ColorUtils.info('💾 Credentials saved for future use'));
             
+            // Prompt for system prompt since login creates a new session
+            console.log('');
+            console.log(ColorUtils.info('🆕 A new chat session has been created. Please set a system prompt:'));
+            const systemPrompt = await this.promptInput('Enter system prompt for this session (or press Enter for no system prompt): ');
+            const finalSystemPrompt = systemPrompt.trim();
+            
+            if (finalSystemPrompt) {
+                // Start new session on server with the system prompt
+                const success = await this.chatServerModuleProxy.startSession(finalSystemPrompt);
+                
+                if (success) {
+                    // Clear the current topic title for new session
+                    this.currentTopicTitle = undefined;
+                    this.updatePrompt();
+                    
+                    console.log(ColorUtils.success('✅ Session started with system prompt'));
+                    console.log(ColorUtils.info(`🎯 System prompt: ${ColorUtils.system(finalSystemPrompt)}`));
+                } else {
+                    console.log(ColorUtils.error('❌ Failed to set system prompt'));
+                }
+            } else {
+                console.log(ColorUtils.info('ℹ️  No system prompt set - using raw model behavior'));
+            }
+            
         } catch (error) {
             console.error(ColorUtils.error('❌ Login failed:'), error);
         }
@@ -852,6 +973,30 @@ export class ChatClient {
         if (showPrompt) {
             this.rl.prompt();
         }
+    }
+
+    /**
+     * Request topic title generation from server and wait for completion
+     */
+    private async requestTopicTitleGeneration(): Promise<void> {
+        try {
+            const response = await this.chatServerModuleProxy.generateTopicTitle();
+            if (response && response.title) {
+                // Display the generated title and update prompt
+                this.displayTopicTitle(response.title);
+            }
+        } catch (error) {
+            // Silently fail - topic title is optional
+        }
+    }
+
+    /**
+     * Display topic title to user and update prompt
+     */
+    private displayTopicTitle(title: string): void {
+        this.currentTopicTitle = title;
+        // Update the prompt to show the new topic title (silently)
+        this.updatePrompt();
     }
 
     /**
@@ -874,6 +1019,7 @@ export class ChatClient {
             this.jsonOutputMode = false;
             this.reasoningEnabled = false;
             this.streamingEnabled = true;
+            this.currentTopicTitle = undefined;
             
             // Update prompt to show clean state
             this.updatePrompt();
@@ -912,7 +1058,8 @@ export class ChatClient {
     }
 
     /**
-     * Test non-streaming cancellation
+     * Test non-streaming cancellationo
+     * should this go into a test suite?
      */
     private async testNonStreamingCancellation(): Promise<void> {
         try {
@@ -926,9 +1073,9 @@ export class ChatClient {
             this.updatePrompt();
 
             // Make a non-streaming request that will take time
-            const response = await this.chatServerModuleProxy.chatNonStreaming(
+            const response = await this.chatServerModuleProxy.chatOnce(
+                "You are a creative storyteller. Write engaging, detailed stories.",
                 "Write a very long and detailed story with many characters and plot twists. Make it at least 2000 words long.",
-                "You are a creative storyteller. Write engaging, detailed stories."
             );
 
             // Process the response
@@ -978,39 +1125,51 @@ export class ChatClient {
             let aiResponse = '';
             
             if (this.streamingEnabled) {
-                if (this.reasoningEnabled) {
-                    // Use new SimpleStreamPacket streaming for reasoning display
-                    await this.processAiResponseWithReasoning(processedMessage);
-                } else {
-                    // Use traditional text streaming
-                    const responseGenerator = await this.chatServerModuleProxy.chatWithHistory(
-                        processedMessage, 
-                        {
-                            jsonOutput: this.jsonOutputMode,
-                            reasoningEnabled: this.reasoningEnabled
-                        }
-                    );
+                // Use new consolidated streaming method
+                const responseGenerator = await this.chatServerModuleProxy.chatStreaming(
+                    processedMessage,
+                    {
+                        reasoningEnabled: this.reasoningEnabled,
+                        jsonOutput: this.jsonOutputMode
+                    }
+                );
 
-                    for await (const text of responseGenerator) {
-                        // Only check for interrupt request (not isProcessingRequest since we manage it here)
-                        if (this.interruptRequested) {
-                            console.log(ColorUtils.info('\n🔄 Response interrupted.'));
-                            break;
-                        }
-                        
-                        // Simply apply AI color to each chunk as it comes in
-                        // We'll parse markdown after the full response is complete
-                        process.stdout.write(ColorUtils.ai(text));
-                        aiResponse += text;
+
+                for await (const packet of responseGenerator) {
+                    // Only check for interrupt request (not isProcessingRequest since we manage it here)
+                    if (this.interruptRequested) {
+                        console.log(ColorUtils.info('\n🔄 Response interrupted.'));
+                        break;
+                    }
+                    
+                    // Handle different packet types
+                    if (packet.reasoning && this.reasoningEnabled) {
+                        // Display reasoning in a different color/style
+                        process.stdout.write(ColorUtils.reasoning(packet.reasoning));
+                    }
+                    
+                    if (packet.content) {
+                        // Display content with AI color
+                        process.stdout.write(ColorUtils.ai(packet.content));
+                        aiResponse += packet.content;
+                    }
+                    
+                    if (packet.source === 'error') {
+                        console.log(ColorUtils.error('\n❌ Error: ' + packet.content));
+                        break;
                     }
                 }
             } else {
-                // Use non-streaming approach
+                // Use new consolidated non-streaming method
                 const response = await this.makeRequest(async () => {
-                    return await this.chatServerModuleProxy.chatNonStreaming(
+                    const packet = await this.chatServerModuleProxy.chat(
                         processedMessage,
-                        this.systemPrompt || "You are a helpful AI assistant. Maintain conversation context and provide relevant responses."
+                        {
+                            reasoningEnabled: this.reasoningEnabled,
+                            jsonOutput: this.jsonOutputMode
+                        }
                     );
+                    return packet.content;
                 });
                 
                 if (response) {
@@ -1022,6 +1181,11 @@ export class ChatClient {
             // Note: AI response is automatically added to server-side DialogueJournal
             if (!this.interruptRequested && aiResponse.trim()) {
                 console.log(''); // New line after AI response
+                
+                // Request topic title generation only if no title exists yet
+                if (!this.currentTopicTitle) {
+                    await this.requestTopicTitleGeneration();
+                }
             }
 
         } catch (error) {
@@ -1045,88 +1209,6 @@ export class ChatClient {
         }
     }
 
-    /**
-     * Processes AI response with reasoning display using SimpleStreamPacket
-     */
-    private async processAiResponseWithReasoning(message: string): Promise<void> {
-        try {
-            // Conditionally modify message based on messageBodyEnabled setting
-            const processedMessage = this.messageBodyEnabled ? message : `[Message metadata only - body disabled] Original length: ${message.length} characters`;
-            
-            // Get AI response with reasoning streaming
-            // Use the new postChatWithReasoning RPC method
-            const responseGenerator = await this.chatServerModuleProxy.postChatWithReasoning(
-                processedMessage, 
-                {
-                    jsonOutput: this.jsonOutputMode,
-                    reasoningEnabled: this.reasoningEnabled
-                }
-            );
-
-            let aiResponse = '';
-            let aiReasoning = '';
-            let reasoningBuffer = '';
-            let contentBuffer = '';
-            let hasReceivedReasoning = false;
-            let hasStartedContent = false;
-
-            for await (const packet of responseGenerator) {
-                // Only check for interrupt request
-                if (this.interruptRequested) {
-                    console.log(ColorUtils.info('\n🔄 Response interrupted.'));
-                    break;
-                }
-
-                // Handle reasoning content
-                if (packet.reasoning) {
-                    reasoningBuffer += packet.reasoning;
-                    aiReasoning += packet.reasoning;
-                    hasReceivedReasoning = true;
-                    
-                    // Display reasoning in a different color/style
-                    process.stdout.write(ColorUtils.reasoning(packet.reasoning));
-                }
-
-                // Handle main content
-                if (packet.content) {
-                    // If we've received reasoning before and this is the first content, start on a new line
-                    if (hasReceivedReasoning && !hasStartedContent) {
-                        console.log(''); // New line to separate reasoning from content
-                        hasStartedContent = true;
-                    }
-                    
-                    contentBuffer += packet.content;
-                    aiResponse += packet.content;
-                    
-                    // Display content with AI color
-                    process.stdout.write(ColorUtils.ai(packet.content));
-                }
-
-                // Handle errors
-                if (packet.source === 'error') {
-                    console.log(ColorUtils.error('\n❌ Error: ' + packet.content));
-                    break;
-                }
-            }
-
-            // Finalize any remaining content
-            if (reasoningBuffer.trim()) {
-                console.log(''); // New line after reasoning
-            }
-
-        } catch (error) {
-            if (error instanceof Error && (
-                error.message === 'Request was cancelled' || 
-                error.name === 'AbortError' ||
-                error.message === 'The operation was aborted.'
-            )) {
-                console.log(ColorUtils.info('🔄 Request cancelled by user.'));
-            } else {
-                console.error(ColorUtils.error('❌ Error getting AI response with reasoning:'), error);
-                console.log(ColorUtils.aiPrompt() + ColorUtils.error('Sorry, I encountered an error. Please try again.'));
-            }
-        }
-    }
 
     /**
      * List all available models
@@ -1382,7 +1464,7 @@ export class ChatClient {
         console.log(ColorUtils.success('💬 Generic Chat CLI Started!'));
         console.log(ColorUtils.info('Type your messages and press Enter.'));
         console.log(ColorUtils.info('Type "quit", "exit", or "bye" to end the chat.'));
-        console.log(ColorUtils.info('Type "clear" to clear conversation history.'));
+        console.log(ColorUtils.info('Type "new" to start a new chat session.'));
         console.log(ColorUtils.info('Type "history" to see conversation history.'));
         console.log(ColorUtils.info('Type "cmdhistory" to see command history.'));
         console.log(ColorUtils.info('Type "system <prompt>" to set system prompt.'));
@@ -1454,6 +1536,200 @@ export class ChatClient {
             }
         } catch (error) {
             console.error(ColorUtils.error('❌ Failed to get conversation history:'), error);
+        }
+        
+        this.rl.prompt();
+    }
+
+    /**
+     * List all available topics
+     */
+    private async listTopics(): Promise<void> {
+        try {
+            console.log(ColorUtils.info('📋 Fetching topics...'));
+            const topics = await this.chatServerModuleProxy.listTopics();
+            
+            if (topics.length === 0) {
+                console.log(ColorUtils.info('ℹ️  No topics found.'));
+                this.rl.prompt();
+                return;
+            }
+
+            console.log(ColorUtils.info(`📋 Available Topics (${topics.length}):`));
+            console.log('');
+
+            topics.forEach((topic, index) => {
+                const lastActivity = new Date(topic.lastActivity).toLocaleString();
+                const status = topic.isArchived ? '📦 Archived' : '💬 Active';
+                const archivedInfo = topic.isArchived ? ` (archived: ${new Date(topic.archivedAt!).toLocaleString()})` : '';
+                
+                console.log(ColorUtils.system(`[${index + 1}] ${status} - ${topic.title}`));
+                console.log(ColorUtils.info(`    Session: ${topic.sessionId}`));
+                console.log(ColorUtils.info(`    Messages: ${topic.messageCount} | Last: ${lastActivity}${archivedInfo}`));
+                if (topic.systemPrompt) {
+                    console.log(ColorUtils.info(`    System: ${topic.systemPrompt.substring(0, 100)}${topic.systemPrompt.length > 100 ? '...' : ''}`));
+                }
+                console.log('');
+            });
+
+            this.rl.prompt();
+        } catch (error) {
+            console.error('❌ Error fetching topics:', error);
+            this.rl.prompt();
+        }
+    }
+
+    /**
+     * List archived topics
+     */
+    private async listArchivedTopics(): Promise<void> {
+        try {
+            console.log(ColorUtils.info('📦 Fetching archived topics...'));
+            const archivedTopics = await this.chatServerModuleProxy.listArchivedTopics();
+            
+            if (archivedTopics.length === 0) {
+                console.log(ColorUtils.info('ℹ️  No archived topics found.'));
+                this.rl.prompt();
+                return;
+            }
+
+            console.log(ColorUtils.info(`📦 Archived Topics (${archivedTopics.length}):`));
+            console.log('');
+
+            archivedTopics.forEach((topic, index) => {
+                const archivedAt = new Date(topic.archivedAt).toLocaleString();
+                const lastActivity = new Date(topic.lastActivity).toLocaleString();
+                
+                console.log(ColorUtils.system(`[${index + 1}] 📦 ${topic.title}`));
+                console.log(ColorUtils.info(`    Session: ${topic.sessionId}`));
+                console.log(ColorUtils.info(`    Messages: ${topic.messageCount} | Last: ${lastActivity}`));
+                console.log(ColorUtils.info(`    Archived: ${archivedAt}`));
+                console.log('');
+            });
+
+            this.rl.prompt();
+        } catch (error) {
+            console.error('❌ Error fetching archived topics:', error);
+            this.rl.prompt();
+        }
+    }
+
+    /**
+     * Archive a specific topic
+     */
+    private async archiveTopic(sessionId: string): Promise<void> {
+        try {
+            console.log(ColorUtils.info(`📦 Archiving topic: ${sessionId}...`));
+            const success = await this.chatServerModuleProxy.archiveTopic(sessionId);
+            
+            if (success) {
+                console.log(ColorUtils.success('✅ Topic archived successfully.'));
+            } else {
+                console.log(ColorUtils.error('❌ Failed to archive topic.'));
+            }
+            
+            this.rl.prompt();
+        } catch (error) {
+            console.error('❌ Error archiving topic:', error);
+            this.rl.prompt();
+        }
+    }
+
+    /**
+     * Archive current topic
+     */
+    private async archiveCurrentTopic(): Promise<void> {
+        try {
+            console.log(ColorUtils.info('📦 Archiving current topic...'));
+            const success = await this.chatServerModuleProxy.archiveCurrentTopic();
+            
+            if (success) {
+                console.log(ColorUtils.success('✅ Current topic archived successfully.'));
+            } else {
+                console.log(ColorUtils.error('❌ Failed to archive current topic.'));
+            }
+            
+            this.rl.prompt();
+        } catch (error) {
+            console.error('❌ Error archiving current topic:', error);
+            this.rl.prompt();
+        }
+    }
+
+    /**
+     * Restore an archived topic
+     */
+    private async restoreArchivedTopic(sessionId: string): Promise<void> {
+        try {
+            console.log(ColorUtils.info(`🔄 Restoring archived topic: ${sessionId}...`));
+            const newSessionId = await this.chatServerModuleProxy.restoreArchivedTopic(sessionId);
+            
+            if (newSessionId) {
+                console.log(ColorUtils.success(`✅ Topic restored as new session: ${newSessionId}`));
+            } else {
+                console.log(ColorUtils.error('❌ Failed to restore archived topic.'));
+            }
+            
+            this.rl.prompt();
+        } catch (error) {
+            console.error('❌ Error restoring archived topic:', error);
+            this.rl.prompt();
+        }
+    }
+
+    /**
+     * Delete an archived topic permanently
+     */
+    private async deleteArchivedTopic(sessionId: string): Promise<void> {
+        try {
+            console.log(ColorUtils.info(`🗑️  Deleting archived topic: ${sessionId}...`));
+            const success = await this.chatServerModuleProxy.deleteArchivedTopic(sessionId);
+            
+            if (success) {
+                console.log(ColorUtils.success('✅ Archived topic deleted permanently.'));
+            } else {
+                console.log(ColorUtils.error('❌ Failed to delete archived topic.'));
+            }
+            
+            this.rl.prompt();
+        } catch (error) {
+            console.error('❌ Error deleting archived topic:', error);
+            this.rl.prompt();
+        }
+    }
+
+    /**
+     * Start a new chat session with system prompt
+     */
+    private async startNewSession(): Promise<void> {
+        try {
+            console.log(ColorUtils.info('🆕 Starting new chat session...'));
+            console.log(ColorUtils.info('💡 This will clear the current conversation and start fresh.'));
+            console.log('');
+            
+            // Get system prompt from user
+            const systemPrompt = await this.promptInput('Enter system prompt for the new session (or press Enter for default): ');
+            const finalSystemPrompt = systemPrompt.trim();
+            
+            console.log('');
+            console.log(ColorUtils.info('🔄 Starting new session...'));
+            
+            // Start new session on server
+            const success = await this.chatServerModuleProxy.startSession(finalSystemPrompt);
+            
+            if (success) {
+                // Clear the current topic title for new session
+                this.currentTopicTitle = undefined;
+                this.updatePrompt();
+                
+                console.log(ColorUtils.success('✅ New chat session started successfully'));
+                console.log(ColorUtils.info(`🎯 System prompt: ${ColorUtils.system(finalSystemPrompt)}`));
+                console.log(ColorUtils.info('💬 You can now start chatting with the new system prompt in effect.'));
+            } else {
+                console.log(ColorUtils.error('❌ Failed to start new session'));
+            }
+        } catch (error) {
+            console.error(ColorUtils.error('❌ Failed to start new session:'), error);
         }
         
         this.rl.prompt();

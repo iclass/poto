@@ -83,10 +83,4 @@ export class LLMReasoningExample extends LLMPotoModule {
 		return await this.getConversationStats();
 	}
 
-	/**
-	 * Archive current conversation
-	 */
-	async postArchiveConversation_(user: PotoUser): Promise<boolean> {
-		return await this.archiveCurrentConversation();
-	}
 }
