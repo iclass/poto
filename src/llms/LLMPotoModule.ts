@@ -637,11 +637,7 @@ export class LLMPotoModule extends PotoModule {
 					// Convert StreamingChunk to StreamPacket
 					const packet = value.toStreamPacket();
 					
-					// Capture token usage from the chunk if available
-					if (value.usage) {
-						// Update the LLM instance's session usage
-						llm.sessionUsage.add(value.usage);
-					}
+					// Token usage is automatically tracked by the LLM class internally
 					
 					// Only yield packets that have content
 					if (packet.hasContent()) {
