@@ -57,7 +57,7 @@ The capital of France is Paris.
 
 ## How It Works
 
-1. **When reasoning is enabled**: The client automatically uses `SimpleStreamPacket` streaming
+1. **When reasoning is enabled**: The client automatically uses `DataPacket` streaming
 2. **Reasoning content**: Displayed in gray color (configurable via `color reasoning <color>`)
 3. **Main content**: Displayed in AI color
 4. **Real-time streaming**: Both reasoning and content stream in real-time
@@ -79,9 +79,9 @@ color reasoning brightBlue  # Bright blue
 color reasoning magenta     # Magenta
 ```
 
-## Integration with SimpleStreamPacket
+## Integration with DataPacket
 
-The reasoning system is fully integrated with `SimpleStreamPacket`:
+The reasoning system is fully integrated with `DataPacket`:
 - **Source**: Identifies the origin (e.g., 'llm', 'user', 'system')
 - **Reasoning**: Contains the AI's thinking process
 - **Content**: Contains the main response

@@ -1,8 +1,8 @@
-# Randomized Delays Testing for SimpleStreamPacket
+# Randomized Delays Testing for DataPacket
 
 ## Overview
 
-Added comprehensive test cases with randomized delays to test the behavior of `SimpleStreamPacket` with `it-merge` and `it-all` under realistic timing conditions.
+Added comprehensive test cases with randomized delays to test the behavior of `DataPacket` with `it-merge` and `it-all` under realistic timing conditions.
 
 ## New Test Cases Added
 
@@ -135,6 +135,6 @@ LLM response: 146 characters
 
 ## Conclusion
 
-The randomized delay test cases provide comprehensive coverage of realistic streaming scenarios, ensuring that `SimpleStreamPacket` works correctly with `it-merge` and `it-all` under various timing conditions. All tests pass consistently, demonstrating the robustness and reliability of the implementation.
+The randomized delay test cases provide comprehensive coverage of realistic streaming scenarios, ensuring that `DataPacket` works correctly with `it-merge` and `it-all` under various timing conditions. All tests pass consistently, demonstrating the robustness and reliability of the implementation.
 
 These tests validate that the simple three-field design (`source`, `reasoning`, `content`) works effectively in complex, real-world streaming scenarios with variable timing and multiple concurrent data sources.

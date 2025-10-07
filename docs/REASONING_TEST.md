@@ -39,7 +39,7 @@ When you enable reasoning:
 
 1. **Real-time thinking display**: AI reasoning appears in gray (or your chosen color)
 2. **Main content display**: AI responses appear in AI color
-3. **SimpleStreamPacket streaming**: Uses the new packet-based system
+3. **DataPacket streaming**: Uses the new packet-based system
 4. **Interruption support**: Ctrl+C works during both reasoning and content streaming
 
 ## Example Session

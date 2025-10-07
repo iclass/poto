@@ -1,10 +1,10 @@
 import { PotoModule } from "../server/PotoModule";
 import { PotoUser } from "../server/UserProvider";
-import { SimpleStreamPacket } from "../shared/SimpleStreamPacket";
+import { DataPacket } from "../shared/DataPacket";
 import { generatorToSseStream } from "../shared/CommonTypes";
 
 /**
- * Example module demonstrating reasoning display with SimpleStreamPacket
+ * Example module demonstrating reasoning display with DataPacket
  * Shows how to stream both content and reasoning to the frontend
  */
 export class ReasoningDisplayExample extends PotoModule {
@@ -44,20 +44,20 @@ export class ReasoningDisplayExample extends PotoModule {
 			
 			// Stream reasoning first
 			for (let i = 0; i < reasoningSteps.length; i++) {
-				yield new SimpleStreamPacket('llm', reasoningSteps[i], '');
+				yield new DataPacket('llm', reasoningSteps[i], '');
 				// Simulate processing time
 				await new Promise(resolve => setTimeout(resolve, 200));
 			}
 			
 			// Then stream content
 			for (let i = 0; i < contentParts.length; i++) {
-				yield new SimpleStreamPacket('llm', '', contentParts[i]);
+				yield new DataPacket('llm', '', contentParts[i]);
 				// Simulate processing time
 				await new Promise(resolve => setTimeout(resolve, 100));
 			}
 			
 			// Final packet to indicate completion
-			yield new SimpleStreamPacket('llm', 'Response complete!', '');
+			yield new DataPacket('llm', 'Response complete!', '');
 		}
 
 		return generatorToSseStream(reasoningStream());

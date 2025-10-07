@@ -46,8 +46,8 @@ req.signal.addEventListener("abort", async () => {
 ```typescript
 // SSE Connect → Start Session
 onSseConnect(userId: string): void {
-    const sessionId = `sse-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    this.startUserSession(userId, sessionId);
+    const conversationId = `sse-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    this.startUserSession(userId, conversationId);
 }
 
 // Chat Activity → Update Activity

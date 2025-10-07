@@ -2,7 +2,7 @@ import type { ChatServerModule } from "../server/ChatServerModule";
 import { PotoClient, PotoConstants } from "../../src/index";
 import { getAppEnv } from "../../src/AppEnv";
 import { ChatMessage, ModelInfo} from "../shared/types";
-import { SimpleStreamPacket } from "../../src/shared/SimpleStreamPacket";
+import { DataPacket } from "../../src/shared/DataPacket";
 import * as readline from 'readline';
 import { startServer } from "../server/ServerMain";
 import { ColorUtils } from "./ColorUtils";
@@ -116,7 +116,7 @@ export class ChatClient {
                     
                     if (finalSystemPrompt) {
                         // Start new session on server with the system prompt
-                        const success = await this.chatServerModuleProxy.startSession(finalSystemPrompt);
+                        const success = await this.chatServerModuleProxy.startNewConversation(finalSystemPrompt);
                         
                         if (success) {
                             console.log(ColorUtils.success('✅ Session started with system prompt'));
@@ -474,8 +474,8 @@ export class ChatClient {
             }
 
             if (message.toLowerCase().startsWith('archive ')) {
-                const sessionId = message.substring(8).trim();
-                await this.archiveTopic(sessionId);
+                const conversationId = message.substring(8).trim();
+                await this.archiveTopic(conversationId);
                 return;
             }
 
@@ -485,14 +485,14 @@ export class ChatClient {
             }
 
             if (message.toLowerCase().startsWith('restore ')) {
-                const sessionId = message.substring(8).trim();
-                await this.restoreArchivedTopic(sessionId);
+                const conversationId = message.substring(8).trim();
+                await this.restoreArchivedTopic(conversationId);
                 return;
             }
 
             if (message.toLowerCase().startsWith('delete-archive ')) {
-                const sessionId = message.substring(15).trim();
-                await this.deleteArchivedTopic(sessionId);
+                const conversationId = message.substring(15).trim();
+                await this.deleteArchivedTopic(conversationId);
                 return;
             }
 
@@ -950,7 +950,7 @@ export class ChatClient {
             
             if (finalSystemPrompt) {
                 // Start new session on server with the system prompt
-                const success = await this.chatServerModuleProxy.startSession(finalSystemPrompt);
+                const success = await this.chatServerModuleProxy.startNewConversation(finalSystemPrompt);
                 
                 if (success) {
                     // Clear the current topic title for new session
@@ -980,7 +980,7 @@ export class ChatClient {
      */
     private async requestTopicTitleGeneration(): Promise<void> {
         try {
-            const response = await this.chatServerModuleProxy.generateTopicTitle();
+            const response = await this.chatServerModuleProxy.generateConversationTitle();
             if (response && response.title) {
                 // Display the generated title and update prompt
                 this.displayTopicTitle(response.title);
@@ -1154,8 +1154,8 @@ export class ChatClient {
                         aiResponse += packet.content;
                     }
                     
-                    if (packet.source === 'error') {
-                        console.log(ColorUtils.error('\n❌ Error: ' + packet.content));
+                    if (packet.hasError()) {
+                        console.log(ColorUtils.error('\n❌ Error: ' + packet.error));
                         break;
                     }
                 }
@@ -1547,24 +1547,24 @@ export class ChatClient {
     private async listTopics(): Promise<void> {
         try {
             console.log(ColorUtils.info('📋 Fetching topics...'));
-            const topics = await this.chatServerModuleProxy.listTopics();
+            const conversations = await this.chatServerModuleProxy.listConversations();
             
-            if (topics.length === 0) {
+            if (conversations.length === 0) {
                 console.log(ColorUtils.info('ℹ️  No topics found.'));
                 this.rl.prompt();
                 return;
             }
 
-            console.log(ColorUtils.info(`📋 Available Topics (${topics.length}):`));
+            console.log(ColorUtils.info(`📋 Available Topics (${conversations.length}):`));
             console.log('');
 
-            topics.forEach((topic, index) => {
+            conversations.forEach((topic, index) => {
                 const lastActivity = new Date(topic.lastActivity).toLocaleString();
                 const status = topic.isArchived ? '📦 Archived' : '💬 Active';
                 const archivedInfo = topic.isArchived ? ` (archived: ${new Date(topic.archivedAt!).toLocaleString()})` : '';
                 
                 console.log(ColorUtils.system(`[${index + 1}] ${status} - ${topic.title}`));
-                console.log(ColorUtils.info(`    Session: ${topic.sessionId}`));
+                console.log(ColorUtils.info(`    Session: ${topic.conversationId}`));
                 console.log(ColorUtils.info(`    Messages: ${topic.messageCount} | Last: ${lastActivity}${archivedInfo}`));
                 if (topic.systemPrompt) {
                     console.log(ColorUtils.info(`    System: ${topic.systemPrompt.substring(0, 100)}${topic.systemPrompt.length > 100 ? '...' : ''}`));
@@ -1601,7 +1601,7 @@ export class ChatClient {
                 const lastActivity = new Date(topic.lastActivity).toLocaleString();
                 
                 console.log(ColorUtils.system(`[${index + 1}] 📦 ${topic.title}`));
-                console.log(ColorUtils.info(`    Session: ${topic.sessionId}`));
+                console.log(ColorUtils.info(`    Session: ${topic.conversationId}`));
                 console.log(ColorUtils.info(`    Messages: ${topic.messageCount} | Last: ${lastActivity}`));
                 console.log(ColorUtils.info(`    Archived: ${archivedAt}`));
                 console.log('');
@@ -1617,10 +1617,10 @@ export class ChatClient {
     /**
      * Archive a specific topic
      */
-    private async archiveTopic(sessionId: string): Promise<void> {
+    private async archiveTopic(conversationId: string): Promise<void> {
         try {
-            console.log(ColorUtils.info(`📦 Archiving topic: ${sessionId}...`));
-            const success = await this.chatServerModuleProxy.archiveTopic(sessionId);
+            console.log(ColorUtils.info(`📦 Archiving topic: ${conversationId}...`));
+            const success = await this.chatServerModuleProxy.archiveTopic(conversationId);
             
             if (success) {
                 console.log(ColorUtils.success('✅ Topic archived successfully.'));
@@ -1659,10 +1659,10 @@ export class ChatClient {
     /**
      * Restore an archived topic
      */
-    private async restoreArchivedTopic(sessionId: string): Promise<void> {
+    private async restoreArchivedTopic(conversationId: string): Promise<void> {
         try {
-            console.log(ColorUtils.info(`🔄 Restoring archived topic: ${sessionId}...`));
-            const newSessionId = await this.chatServerModuleProxy.restoreArchivedTopic(sessionId);
+            console.log(ColorUtils.info(`🔄 Restoring archived topic: ${conversationId}...`));
+            const newSessionId = await this.chatServerModuleProxy.restoreArchivedTopic(conversationId);
             
             if (newSessionId) {
                 console.log(ColorUtils.success(`✅ Topic restored as new session: ${newSessionId}`));
@@ -1680,10 +1680,10 @@ export class ChatClient {
     /**
      * Delete an archived topic permanently
      */
-    private async deleteArchivedTopic(sessionId: string): Promise<void> {
+    private async deleteArchivedTopic(conversationId: string): Promise<void> {
         try {
-            console.log(ColorUtils.info(`🗑️  Deleting archived topic: ${sessionId}...`));
-            const success = await this.chatServerModuleProxy.deleteArchivedTopic(sessionId);
+            console.log(ColorUtils.info(`🗑️  Deleting archived topic: ${conversationId}...`));
+            const success = await this.chatServerModuleProxy.deleteArchivedTopic(conversationId);
             
             if (success) {
                 console.log(ColorUtils.success('✅ Archived topic deleted permanently.'));
@@ -1715,7 +1715,7 @@ export class ChatClient {
             console.log(ColorUtils.info('🔄 Starting new session...'));
             
             // Start new session on server
-            const success = await this.chatServerModuleProxy.startSession(finalSystemPrompt);
+            const success = await this.chatServerModuleProxy.startNewConversation(finalSystemPrompt);
             
             if (success) {
                 // Clear the current topic title for new session

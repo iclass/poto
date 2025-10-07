@@ -8,6 +8,7 @@ export interface UserSessionData {
     userId: string;
     createdAt: Date;
     lastActivity: Date;
+    currentConversationId?: string; // Track the current conversation ID
     [key: string]: any; // Allow arbitrary session data
 }
 

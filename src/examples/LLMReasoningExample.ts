@@ -1,10 +1,10 @@
 import { LLMPotoModule } from "../llms/LLMPotoModule";
 import { PotoUser } from "../server/UserProvider";
-import { SimpleStreamPacket } from "../shared/SimpleStreamPacket";
+import { DataPacket } from "../shared/DataPacket";
 import { generatorToSseStream } from "../shared/CommonTypes";
 
 /**
- * Example LLM module that demonstrates reasoning display with SimpleStreamPacket
+ * Example LLM module that demonstrates reasoning display with DataPacket
  * Extends LLMPotoModule to provide reasoning-enabled chat functionality
  */
 export class LLMReasoningExample extends LLMPotoModule {
@@ -13,13 +13,13 @@ export class LLMReasoningExample extends LLMPotoModule {
 	}
 
 	/**
-	 * Chat endpoint that streams both content and reasoning using SimpleStreamPacket
+	 * Chat endpoint that streams both content and reasoning using DataPacket
 	 * This demonstrates the complete flow from LLM to frontend with reasoning display
 	 */
 	async postChatWithReasoning_(message: string, user: PotoUser): Promise<ReadableStream<Uint8Array>> {
 		const self = this;
 		async function* reasoningStream() {
-			// Use the new chatWithReasoning method that returns SimpleStreamPacket
+			// Use the new chatWithReasoning method that returns DataPacket
 			for await (const packet of self.chatWithReasoning(message, {
 				reasoningEnabled: true,
 				systemPrompt: "You are a helpful AI assistant. Show your reasoning process as you think through problems. Be thorough in your analysis and explain your thought process step by step."

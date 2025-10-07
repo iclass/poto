@@ -33,22 +33,22 @@ export class VolatileMemoryDialogueJournal extends BaseDialogueJournal {
     /**
      * Get user's conversation history
      */
-    async getConversation(user: PotoUser, sessionId?: string): Promise<ChatMessage[]> {
+    async getConversation(user: PotoUser, conversationId?: string): Promise<ChatMessage[]> {
         this.validateUser(user);
         const userId = user.id;
-        const key = sessionId ? `${userId}-${sessionId}` : userId;
+        const key = conversationId ? `${userId}-${conversationId}` : userId;
         return this.conversations.get(key) || [];
     }
 
     /**
      * Add a message to user's conversation
      */
-    async addMessage(user: PotoUser, message: ChatMessage, sessionId?: string): Promise<void> {
+    async addMessage(user: PotoUser, message: ChatMessage, conversationId?: string): Promise<void> {
         this.validateUser(user);
         this.validateMessage(message);
         
         const userId = user.id;
-        const key = sessionId ? `${userId}-${sessionId}` : userId;
+        const key = conversationId ? `${userId}-${conversationId}` : userId;
         let conversation = this.conversations.get(key) || [];
         
         // Add timestamp if not present
@@ -73,12 +73,12 @@ export class VolatileMemoryDialogueJournal extends BaseDialogueJournal {
     /**
      * Add multiple messages to user's conversation
      */
-    async addMessages(user: PotoUser, messages: ChatMessage[], sessionId?: string): Promise<void> {
+    async addMessages(user: PotoUser, messages: ChatMessage[], conversationId?: string): Promise<void> {
         this.validateUser(user);
         messages.forEach(msg => this.validateMessage(msg));
         
         const userId = user.id;
-        const key = sessionId ? `${userId}-${sessionId}` : userId;
+        const key = conversationId ? `${userId}-${conversationId}` : userId;
         let conversation = this.conversations.get(key) || [];
         
         // Add timestamps to messages that don't have them
@@ -103,10 +103,10 @@ export class VolatileMemoryDialogueJournal extends BaseDialogueJournal {
     /**
      * Clear user's conversation history
      */
-    async clearConversation(user: PotoUser, sessionId?: string): Promise<void> {
+    async clearConversation(user: PotoUser, conversationId?: string): Promise<void> {
         this.validateUser(user);
         const userId = user.id;
-        const key = sessionId ? `${userId}-${sessionId}` : userId;
+        const key = conversationId ? `${userId}-${conversationId}` : userId;
         this.conversations.delete(key);
     }
 

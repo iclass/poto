@@ -5,7 +5,7 @@ import { UserSessionData } from "../server/UserSessionProvider";
 import { DialogueJournal, ChatMessage } from "../server/DialogueJournal";
 import { PotoUser } from "../server/UserProvider";
 import { DialogueJournalFactory } from "../server/DialogueJournalFactory";
-import { SimpleStreamPacket } from "../shared/SimpleStreamPacket";
+import { DataPacket } from "../shared/DataPacket";
 import { roles } from "src/server/serverDecorators";
 import * as path from "path";
 import * as fs from "fs/promises";
@@ -21,14 +21,13 @@ export interface ModelInfo {
 export interface LLMSessionData extends UserSessionData {
 	currentModelName: string;
 	systemPrompt?: string;
-	sessionId?: string;
 }
 
 // User session info for activity tracking
 export interface UserSessionInfo {
 	lastActivity: Date;
 	isActive: boolean;
-	sessionId: string;
+	currentConversationId: string;
 }
 
 // Options for LLMPotoModule initialization
@@ -122,20 +121,16 @@ export class LLMPotoModule extends PotoModule {
 	}
 
 	/**
-	 * Override to ensure sessionId is always present in LLM sessions
+	 * Override to ensure currentConversationId is always present in LLM sessions
 	 */
 	protected async getUserSession(): Promise<LLMSessionData> {
 		const session = await super.getUserSession() as LLMSessionData;
 		
-		// If session doesn't have a sessionId, create one
-		if (!session.sessionId) {
-			const now = new Date();
-			const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
-			const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
-			const randomSuffix = Math.random().toString(36).substr(2, 2); // 2 random chars
-			session.sessionId = `session-${dateStr}-${timeStr}-${randomSuffix}`;
+		// If session doesn't have a currentConversationId, create one
+		if (!session.currentConversationId) {
+			session.currentConversationId = this.generateConversationId('conversation');
 			
-			// Save the updated session with sessionId
+			// Save the updated session with currentConversationId
 			const user = await this.getCurrentUser();
 			if (user) {
 				await this.sessionProvider.setSession(user.id, session);
@@ -151,17 +146,13 @@ export class LLMPotoModule extends PotoModule {
 	protected createDefaultSessionData(userId: string): LLMSessionData {
 		LLMPotoModule.ensureLLMConfigLoaded();
 		
-		// Generate a unique session ID for all new sessions
-		const now = new Date();
-		const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
-		const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
-		const randomSuffix = Math.random().toString(36).substr(2, 2); // 2 random chars
-		const sessionId = `session-${dateStr}-${timeStr}-${randomSuffix}`;
+		// Generate a unique conversation ID for all new sessions
+		const currentConversationId = this.generateConversationId('conversation');
 		
 		return {
 			...super.createDefaultSessionData(userId),
 			currentModelName: LLMConfig.getDefaultConfigName(),
-			sessionId: sessionId
+			currentConversationId: currentConversationId
 		};
 	}
 
@@ -421,8 +412,7 @@ export class LLMPotoModule extends PotoModule {
 	): AsyncGenerator<string> {
 		try {
 			// Get cancellation-aware LLM instance with user-specific model from session
-			const llm = await this.getUserPreferredLLM();
-			llm.clearFormat();
+			const llm = await this.setupLLM(options.systemPrompt);
 			
 			// Set JSON output format if requested
 			if (options.jsonOutput) {
@@ -431,22 +421,9 @@ export class LLMPotoModule extends PotoModule {
 			
 			// Set reasoning enabled/disabled
 			llm.setReasoningEnabled(options.reasoningEnabled || false);
-			
-			// Set system prompt only if explicitly provided
-			if (options.systemPrompt) {
-				llm.system(options.systemPrompt);
-			}
 
 			// Load conversation history into LLM context
-			for (const msg of history) {
-				if (msg.role === 'user') {
-					llm.user(msg.content);
-				} else if (msg.role === 'assistant') {
-					llm.assistant(msg.content);
-				} else if (msg.role === 'system') {
-					llm.system(msg.content);
-				}
-			}
+			this.loadConversationHistory(llm, history);
 
 			// Add current message
 			llm.user(message);
@@ -456,8 +433,7 @@ export class LLMPotoModule extends PotoModule {
 				yield text;
 			}
 		} catch (error) {
-			const err = error as Error;
-			yield `Error: ${err.message}`;
+			yield this.handleLLMError(error);
 		}
 	}
 
@@ -475,8 +451,7 @@ export class LLMPotoModule extends PotoModule {
 	): AsyncGenerator<{ content: string; metadata?: any; finalMetadata?: any }> {
 		try {
 			// Get cancellation-aware LLM instance with user-specific model from session
-			const llm = await this.getUserPreferredLLM();
-			llm.clearFormat();
+			const llm = await this.setupLLM(options.systemPrompt);
 			
 			// Set JSON output format if requested
 			if (options.jsonOutput) {
@@ -485,22 +460,9 @@ export class LLMPotoModule extends PotoModule {
 			
 			// Set reasoning enabled/disabled
 			llm.setReasoningEnabled(options.reasoningEnabled || false);
-			
-			// Set system prompt only if explicitly provided
-			if (options.systemPrompt) {
-				llm.system(options.systemPrompt);
-			}
 
 			// Load conversation history into LLM context
-			for (const msg of history) {
-				if (msg.role === 'user') {
-					llm.user(msg.content);
-				} else if (msg.role === 'assistant') {
-					llm.assistant(msg.content);
-				} else if (msg.role === 'system') {
-					llm.system(msg.content);
-				}
-			}
+			this.loadConversationHistory(llm, history);
 
 			// Add current message
 			llm.user(message);
@@ -571,7 +533,7 @@ export class LLMPotoModule extends PotoModule {
 		} catch (error) {
 			const err = error as Error;
 			yield { 
-				content: `Error: ${err.message}`,
+				content: this.handleLLMError(error),
 				metadata: {
 					error: err.message
 				}
@@ -580,9 +542,9 @@ export class LLMPotoModule extends PotoModule {
 	}
 
 	/**
-	 * Enhanced LLM streaming with SimpleStreamPacket support
+	 * Enhanced LLM streaming with DataPacket support
 	 * This method provides unified handling of both thinking and content channels
-	 * Returns SimpleStreamPacket objects that can be easily consumed by frontend
+	 * Returns DataPacket objects that can be easily consumed by frontend
 	 */
 	protected async *streamLLMWithSimplePackets(
 		message: string,
@@ -592,11 +554,10 @@ export class LLMPotoModule extends PotoModule {
 			reasoningEnabled?: boolean;
 			systemPrompt?: string;
 		} = {}
-	): AsyncGenerator<SimpleStreamPacket> {
+	): AsyncGenerator<DataPacket> {
 		try {
 			// Get cancellation-aware LLM instance with user-specific model from session
-			const llm = await this.getUserPreferredLLM();
-			llm.clearFormat();
+			const llm = await this.setupLLM(options.systemPrompt);
 			
 			// Set JSON output format if requested
 			if (options.jsonOutput) {
@@ -605,22 +566,9 @@ export class LLMPotoModule extends PotoModule {
 			
 			// Set reasoning enabled/disabled
 			llm.setReasoningEnabled(options.reasoningEnabled || false);
-			
-			// Set system prompt only if explicitly provided
-			if (options.systemPrompt) {
-				llm.system(options.systemPrompt);
-			}
 
 			// Load conversation history into LLM context
-			for (const msg of history) {
-				if (msg.role === 'user') {
-					llm.user(msg.content);
-				} else if (msg.role === 'assistant') {
-					llm.assistant(msg.content);
-				} else if (msg.role === 'system') {
-					llm.system(msg.content);
-				}
-			}
+			this.loadConversationHistory(llm, history);
 
 			// Add current message
 			llm.user(message);
@@ -648,9 +596,8 @@ export class LLMPotoModule extends PotoModule {
 				reader.releaseLock();
 			}
 		} catch (error) {
-			const err = error as Error;
-			// Return error as a SimpleStreamPacket
-			yield new SimpleStreamPacket('error', '', `Error: ${err.message}`);
+			// Return error as a DataPacket
+			yield this.handleLLMErrorAsPacket(error, 'llm');
 		}
 	}
 
@@ -662,13 +609,7 @@ export class LLMPotoModule extends PotoModule {
 	
 		try {
 			// Get cancellation-aware LLM instance
-			const llm = await this.getUserPreferredLLM();
-			llm.clearFormat();
-
-			// Set system prompt only if provided
-			if (systemPrompt) {
-				llm.system(systemPrompt);
-			}
+			const llm = await this.setupLLM(systemPrompt);
 
 			llm.user(message);
 
@@ -677,14 +618,13 @@ export class LLMPotoModule extends PotoModule {
 				yield text;
 			}
 		} catch (error) {
-			const err = error as Error;
-			yield `Error: ${err.message}`;
+			yield this.handleLLMError(error);
 		}
 	}
 	
 	
 	/**
-	 * Enhanced chat with SimpleStreamPacket support for reasoning display
+	 * Enhanced chat with DataPacket support for reasoning display
 	 * This method provides both content and reasoning streams to the frontend
 	 */
 	public async *chatWithReasoning(
@@ -694,7 +634,7 @@ export class LLMPotoModule extends PotoModule {
 			reasoningEnabled?: boolean;
 			systemPrompt?: string;
 		} = {}
-	): AsyncGenerator<SimpleStreamPacket> {
+	): AsyncGenerator<DataPacket> {
 		const startTime = Date.now();
 		let firstTokenTime: number | null = null;
 		
@@ -702,7 +642,7 @@ export class LLMPotoModule extends PotoModule {
 			// Get current user
 			const user = await this.getCurrentUser();
 			if (!user) {
-				yield new SimpleStreamPacket('error', '', 'User not authenticated');
+				yield new DataPacket('auth', '', '', 'User not authenticated');
 				return;
 			}
 			
@@ -711,16 +651,16 @@ export class LLMPotoModule extends PotoModule {
 				this.updateUserActivity(user.id);
 			}
 			
-			// Get session ID from session data
+			// Get topic ID from session data
 			const sessionData = await this.getUserSession();
-			const sessionId = sessionData.sessionId;
+			const conversationId = sessionData.currentConversationId;
 			
 			// Load conversation history from dialogue journal or use empty array
 			const history = this.dialogueJournal 
-				? await this.dialogueJournal.getConversation(user, sessionId)
+				? await this.dialogueJournal.getConversation(user, conversationId)
 				: [];
 			
-			// Use the new SimpleStreamPacket streaming method
+			// Use the new DataPacket streaming method
 			let aiResponse = '';
 			let aiReasoning = '';
 			
@@ -744,31 +684,24 @@ export class LLMPotoModule extends PotoModule {
 			// Add both user message and AI response to dialogue journal if available
 			if (this.dialogueJournal) {
 				// Add user message first
-				await this.dialogueJournal.addMessage(user, { 
-					role: 'user', 
-					content: message,
-					timestamp: new Date().toISOString()
-				}, sessionId);
+				await this.dialogueJournal.addMessageForUser(user, message, conversationId);
 				
 				// Add AI response with enhanced metadata if we have content
 				if (aiResponse.trim()) {
 					// Calculate performance metrics
-					const processingTime = Date.now() - startTime;
-					const firstTokenLatency = firstTokenTime ? firstTokenTime - startTime : 0;
+					const metrics = this.calculatePerformanceMetrics(startTime, firstTokenTime, null);
 					
-					await this.dialogueJournal.addMessage(user, { 
-						role: 'assistant', 
-						content: aiResponse,
-						timestamp: new Date().toISOString(),
-						metadata: {
-							reasoning: aiReasoning,
-							performance: {
-								processingTimeMs: processingTime,
-								firstTokenLatencyMs: firstTokenLatency,
-								tokensPerSecond: 0 // SimpleStreamPacket doesn't provide token usage
-							}
-						}
-				}, sessionId);
+					await this.dialogueJournal.addMessageForAssistant(
+						user, 
+						aiResponse, 
+						aiReasoning, 
+						{
+							processingTimeMs: metrics.processingTime,
+							firstTokenLatencyMs: metrics.firstTokenLatency,
+							tokensPerSecond: 0 // DataPacket doesn't provide token usage
+						}, 
+						conversationId
+					);
 
 				// Trigger topic summarization in background
 				this.triggerTopicSummarization().catch(error => {
@@ -778,7 +711,7 @@ export class LLMPotoModule extends PotoModule {
 			}
 		} catch (error) {
 			const err = error as Error;
-			yield new SimpleStreamPacket('error', '', `Error: ${err.message}`);
+			yield new DataPacket('llm', '', '', err.message);
 		}
 	}
 
@@ -817,22 +750,18 @@ export class LLMPotoModule extends PotoModule {
 				this.updateUserActivity(user.id);
 			}
 			
-			// Get session ID from session data
+			// Get topic ID from session data
 			const sessionData = await this.getUserSession();
-			const sessionId = sessionData.sessionId;
+			const conversationId = sessionData.currentConversationId;
 			
 			// Add user message to dialogue journal if available
 			if (this.dialogueJournal) {
-				await this.dialogueJournal.addMessage(user, { 
-					role: 'user', 
-					content: message,
-					timestamp: new Date().toISOString()
-				}, sessionId);
+				await this.dialogueJournal.addMessageForUser(user, message, conversationId);
 			}
 			
 			// Load conversation history from dialogue journal or use empty array
 			const history = this.dialogueJournal 
-				? await this.dialogueJournal.getConversation(user, sessionId)
+				? await this.dialogueJournal.getConversation(user, conversationId)
 				: [];
 			
 			// Get LLM instance to capture configuration
@@ -895,9 +824,7 @@ export class LLMPotoModule extends PotoModule {
 			// Add AI response to dialogue journal with enhanced metadata if available
 			if (this.dialogueJournal && aiResponse.trim()) {
 				// Calculate performance metrics
-				const processingTime = Date.now() - startTime;
-				const firstTokenLatency = firstTokenTime ? firstTokenTime - startTime : 0;
-				const tokensPerSecond = tokenUsage ? (tokenUsage.total_tokens / (processingTime / 1000)) : 0;
+				const metrics = this.calculatePerformanceMetrics(startTime, firstTokenTime, tokenUsage);
 				
 				await this.dialogueJournal.addMessage(user, { 
 					role: 'assistant', 
@@ -914,9 +841,9 @@ export class LLMPotoModule extends PotoModule {
 							cached: tokenUsage.cached_input_tokens || 0
 						} : null,
 						performance: {
-							processingTimeMs: processingTime,
-							firstTokenLatencyMs: firstTokenLatency,
-							tokensPerSecond: Math.round(tokensPerSecond)
+							processingTimeMs: metrics.processingTime,
+							firstTokenLatencyMs: metrics.firstTokenLatency,
+							tokensPerSecond: Math.round(metrics.tokensPerSecond)
 						},
 						config: llmConfig,
 						response: {
@@ -924,7 +851,7 @@ export class LLMPotoModule extends PotoModule {
 							responseId: responseId || `resp_${Date.now()}`
 						}
 					}
-				}, sessionId);
+				}, conversationId);
 
 				// Trigger topic summarization in background
 				this.triggerTopicSummarization().catch(error => {
@@ -942,13 +869,13 @@ export class LLMPotoModule extends PotoModule {
 	/**
 	 * Start a new user session
 	 */
-	protected startUserSession(userId: string, sessionId: string): void {
+	protected startUserSession(userId: string, currentConversationId: string): void {
 		this.userSessions.set(userId, {
 			lastActivity: new Date(),
 			isActive: true,
-			sessionId
+			currentConversationId
 		});
-		console.log(`📱 User ${userId} started session ${sessionId}`);
+		console.log(`📱 User ${userId} started conversation ${currentConversationId}`);
 	}
 
 	/**
@@ -1038,8 +965,8 @@ export class LLMPotoModule extends PotoModule {
 				return [];
 			}
 			const sessionData = await this.getUserSession();
-			const sessionId = sessionData.sessionId;
-			return this.dialogueJournal ? await this.dialogueJournal.getConversation(user, sessionId) : [];
+			const conversationId = sessionData.currentConversationId;
+			return this.dialogueJournal ? await this.dialogueJournal.getConversation(user, conversationId) : [];
 		} catch (error) {
 			return [];
 		}
@@ -1065,8 +992,8 @@ export class LLMPotoModule extends PotoModule {
 				};
 			}
 			const sessionData = await this.getUserSession();
-			const sessionId = sessionData.sessionId;
-			return this.dialogueJournal ? await this.dialogueJournal.getConversationSummary(user, sessionId) : {
+			const conversationId = sessionData.currentConversationId;
+			return this.dialogueJournal ? await this.dialogueJournal.getConversationSummary(user, conversationId) : {
 				messageCount: 0,
 				userMessageCount: 0,
 				assistantMessageCount: 0
@@ -1115,8 +1042,8 @@ export class LLMPotoModule extends PotoModule {
 				return [];
 			}
 			const sessionData = await this.getUserSession();
-			const sessionId = sessionData.sessionId;
-			return this.dialogueJournal ? await this.dialogueJournal.getRecentMessages(user, count, sessionId) : [];
+			const conversationId = sessionData.currentConversationId;
+			return this.dialogueJournal ? await this.dialogueJournal.getRecentMessages(user, count, conversationId) : [];
 		} catch (error) {
 			return [];
 		}
@@ -1158,8 +1085,8 @@ export class LLMPotoModule extends PotoModule {
 
 			if (this.dialogueJournal) {
 				const sessionData = await this.getUserSession();
-				const sessionId = sessionData.sessionId;
-				await this.dialogueJournal.clearConversation(user, sessionId);
+				const conversationId = sessionData.currentConversationId;
+				await this.dialogueJournal.clearConversation(user, conversationId);
 				console.log(`🧹 Cleared conversation for user ${user.id}`);
 				return true;
 			} else {
@@ -1254,22 +1181,18 @@ export class LLMPotoModule extends PotoModule {
 	async onLogin(userId: string): Promise<void> {
 		console.log(`🔐 User ${userId} logged in successfully`);
 		
-		// Start a new topic/session for the user with human-readable ID
-		const now = new Date();
-		const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
-		const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
-		const randomSuffix = Math.random().toString(36).substr(2, 2); // 2 random chars
-		const sessionId = `login-${dateStr}-${timeStr}-${randomSuffix}`;
-		this.startUserSession(userId, sessionId);
-		console.log(`🆕 New topic/session started for user ${userId}: ${sessionId}`);
+		// Start a new conversation for the user with human-readable ID
+		const conversationId = this.generateConversationId('login');
+		this.startUserSession(userId, conversationId);
+		console.log(`🆕 New conversation started for user ${userId}: ${conversationId}`);
 	}
 
 	/**
-	 * List all available topics/sessions for the current user
+	 * List all available conversations for the current user
 	 */
 	@roles('user')
-	public async listTopics(includeArchived: boolean = false): Promise<Array<{
-		sessionId: string;
+	public async listConversations(includeArchived: boolean = false): Promise<Array<{
+		conversationId: string;
 		title: string;
 		lastActivity: string;
 		messageCount: number;
@@ -1288,7 +1211,7 @@ export class LLMPotoModule extends PotoModule {
 			}
 
 			const topics: Array<{
-				sessionId: string;
+				conversationId: string;
 				title: string;
 				lastActivity: string;
 				messageCount: number;
@@ -1299,10 +1222,10 @@ export class LLMPotoModule extends PotoModule {
 
 			const sessionData = await this.getUserSession();
 
-			// Get current active session
-			if (sessionData.sessionId) {
+			// Get current active topic
+			if (sessionData.currentConversationId) {
 				try {
-					const conversation = await this.dialogueJournal.getConversation(user, sessionData.sessionId);
+					const conversation = await this.dialogueJournal.getConversation(user, sessionData.currentConversationId);
 					if (conversation.length > 0) {
 						const firstMessage = conversation[0];
 						const lastMessage = conversation[conversation.length - 1];
@@ -1319,7 +1242,7 @@ export class LLMPotoModule extends PotoModule {
 						const systemPrompt = conversation.find(msg => msg.role === 'system')?.content;
 						
 						topics.push({
-							sessionId: sessionData.sessionId,
+							conversationId: sessionData.currentConversationId,
 							title,
 							lastActivity: lastMessage.timestamp,
 							messageCount: conversation.length,
@@ -1337,7 +1260,7 @@ export class LLMPotoModule extends PotoModule {
 				const archivedTopics = sessionData.archivedTopics || [];
 				for (const archivedTopic of archivedTopics) {
 					topics.push({
-						sessionId: archivedTopic.sessionId,
+						conversationId: archivedTopic.conversationId,
 						title: archivedTopic.title,
 						lastActivity: archivedTopic.lastActivity,
 						messageCount: archivedTopic.messageCount,
@@ -1358,50 +1281,46 @@ export class LLMPotoModule extends PotoModule {
 	}
 
 	/**
-	 * Switch to a different topic/session
+	 * Switch to a different conversation
 	 */
 	@roles('user')
-	public async switchToTopic(sessionId: string): Promise<boolean> {
+	public async switchToConversation(conversationId: string): Promise<boolean> {
 		try {
 			const user = await this.getCurrentUser();
 			if (!user) {
 				throw new Error('User not authenticated');
 			}
 
-			// Update the current session data with the new sessionId
+			// Update the current session data with the new conversationId
 			const sessionData = await this.getUserSession();
-			sessionData.sessionId = sessionId;
+			sessionData.currentConversationId = conversationId;
 			await this.sessionProvider.setSession(user.id, sessionData);
 
-			console.log(`🔄 Switched to topic/session: ${sessionId}`);
+			console.log(`🔄 Switched to conversation: ${conversationId}`);
 			return true;
 		} catch (error) {
-			console.error('Error switching to topic:', error);
+			console.error('Error switching to conversation:', error);
 			return false;
 		}
 	}
 
 	/**
-	 * Create a new topic/session
+	 * Create a new conversation
 	 */
 	@roles('user')
-	public async createNewTopic(systemPrompt?: string): Promise<string> {
+	public async createNewConversation(systemPrompt?: string): Promise<string> {
 		try {
 			const user = await this.getCurrentUser();
 			if (!user) {
 				throw new Error('User not authenticated');
 			}
 
-			// Generate a new session ID
-		const now = new Date();
-		const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
-		const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
-		const randomSuffix = Math.random().toString(36).substr(2, 2); // 2 random chars
-			const sessionId = `topic-${dateStr}-${timeStr}-${randomSuffix}`;
+			// Generate a new topic ID
+			const conversationId = this.generateConversationId('conversation');
 
 			// Update session data
 			const sessionData = await this.getUserSession();
-			sessionData.sessionId = sessionId;
+			sessionData.currentConversationId = conversationId;
 			if (systemPrompt) {
 				sessionData.systemPrompt = systemPrompt;
 			}
@@ -1416,15 +1335,15 @@ export class LLMPotoModule extends PotoModule {
 					metadata: {
 						model: 'system',
 						reasoning: 'topic_start',
-						sessionId: sessionId
+						conversationId: conversationId
 					}
-				}, sessionId);
+				}, conversationId);
 			}
 
-			console.log(`🆕 Created new topic/session: ${sessionId}`);
-			return sessionId;
+			console.log(`🆕 Created new conversation: ${conversationId}`);
+			return conversationId;
 		} catch (error) {
-			console.error('Error creating new topic:', error);
+			console.error('Error creating new conversation:', error);
 			throw error;
 		}
 	}
@@ -1494,12 +1413,105 @@ export class LLMPotoModule extends PotoModule {
 		return `${shard}/${userId}`;
 	}
 
+	// ============================================================================
+	// UTILITY METHODS FOR CODE CONSOLIDATION
+	// ============================================================================
 
 	/**
-	 * Generate topic title for current session (client-initiated)
+	 * Generate a unique conversation ID with timestamp and random suffix
+	 * Consolidates the duplicated conversation ID generation logic
+	 */
+	private generateConversationId(prefix: string = 'conversation'): string {
+		const now = new Date();
+		const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+		const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+		const randomSuffix = Math.random().toString(36).substr(2, 2); // 2 random chars
+		return `${prefix}-${dateStr}-${timeStr}-${randomSuffix}`;
+	}
+
+	/**
+	 * Setup LLM instance with common configuration
+	 * Consolidates the duplicated LLM setup logic
+	 */
+	private async setupLLM(systemPrompt?: string): Promise<LLM> {
+		const llm = await this.getUserPreferredLLM();
+		llm.clearFormat();
+		
+		if (systemPrompt) {
+			llm.system(systemPrompt);
+		}
+		
+		return llm;
+	}
+
+	/**
+	 * Load conversation history into LLM context
+	 * Consolidates the duplicated history loading logic
+	 */
+	private loadConversationHistory(llm: LLM, history: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>): void {
+		for (const msg of history) {
+			if (msg.role === 'user') {
+				llm.user(msg.content);
+			} else if (msg.role === 'assistant') {
+				llm.assistant(msg.content);
+			} else if (msg.role === 'system') {
+				llm.system(msg.content);
+			}
+		}
+	}
+
+	/**
+	 * Calculate performance metrics for LLM operations
+	 * Consolidates the duplicated performance calculation logic
+	 */
+	private calculatePerformanceMetrics(
+		startTime: number, 
+		firstTokenTime: number | null, 
+		tokenUsage: any
+	): { processingTime: number; firstTokenLatency: number; tokensPerSecond: number } {
+		const processingTime = Date.now() - startTime;
+		const firstTokenLatency = firstTokenTime ? firstTokenTime - startTime : 0;
+		const tokensPerSecond = tokenUsage ? (tokenUsage.total_tokens / (processingTime / 1000)) : 0;
+		
+		return { processingTime, firstTokenLatency, tokensPerSecond };
+	}
+
+	/**
+	 * Ensure user is authenticated, throw error if not
+	 * Consolidates the duplicated authentication check logic
+	 */
+	private async ensureUserAuthenticated(): Promise<PotoUser> {
+		const user = await this.getCurrentUser();
+		if (!user) {
+			throw new Error('User not authenticated');
+		}
+		return user;
+	}
+
+	/**
+	 * Handle LLM errors consistently
+	 * Consolidates the duplicated error handling logic
+	 */
+	private handleLLMError(error: unknown): string {
+		const err = error as Error;
+		return `Error: ${err.message}`;
+	}
+
+	/**
+	 * Handle LLM errors as DataPacket
+	 * Consolidates the duplicated error handling logic for streaming
+	 */
+	private handleLLMErrorAsPacket(error: unknown, source: string = 'llm'): DataPacket {
+		const err = error as Error;
+		return new DataPacket(source, '', '', err.message);
+	}
+
+
+	/**
+	 * Generate conversation title for current session (client-initiated)
 	 */
 	@roles('user')
-	public async generateTopicTitle(): Promise<{ title: string; timestamp: string } | null> {
+	public async generateConversationTitle(): Promise<{ title: string; timestamp: string } | null> {
 		try {
 			const user = await this.getCurrentUser();
 			if (!user || !this.dialogueJournal) {
@@ -1507,10 +1519,10 @@ export class LLMPotoModule extends PotoModule {
 			}
 
 			const sessionData = await this.getUserSession();
-			const sessionId = sessionData.sessionId;
+			const conversationId = sessionData.currentConversationId;
 			
 			// Get current conversation
-			const conversation = await this.dialogueJournal.getConversation(user, sessionId);
+			const conversation = await this.dialogueJournal.getConversation(user, conversationId);
 			
 			// Need at least 2 messages (user + assistant) to generate a title
 			if (conversation.length < 2) {
@@ -1526,8 +1538,7 @@ export class LLMPotoModule extends PotoModule {
 			}
 
 			// Generate title using LLM
-			const llm = await this.getUserPreferredLLM();
-			llm.clearFormat();
+			const llm = await this.setupLLM();
 
 			const titlePrompt = `Generate a short, descriptive title (max 50 characters) that describes what the user wants to discuss. Focus ONLY on the user's intent, not any response content.
 
@@ -1556,9 +1567,9 @@ Title:`;
 					metadata: {
 						model: 'system',
 						reasoning: `Generated topic title: "${title}"`,
-						sessionId: sessionId
+						conversationId: conversationId
 					}
-				}, sessionId);
+				}, conversationId);
 
 				console.log(`📝 Generated topic title: "${title}"`);
 				
@@ -1575,22 +1586,29 @@ Title:`;
 		}
 	}
 
+	
 	/**
-	 * Get topic title for a session (client can call this)
+	 * Get conversation title for a session (client can call this)
 	 */
 	@roles('user')
-	public async getTopicTitle(sessionId?: string): Promise<{ title: string; timestamp: string } | null> {
+	public async getCurrentConversationTitle(conversationId?: string): Promise<{ title: string; timestamp: string } | null> {
 		try {
 			const user = await this.getCurrentUser();
 			if (!user) return null;
 
 			const sessionData = await this.sessionProvider.getSession(user.id);
-			if (sessionData?.topicTitles?.[sessionId || '']) {
-				return sessionData.topicTitles[sessionId || ''];
+			// Check if the requested conversationId matches the current conversation in session
+			if (sessionData?.currentConversationId && 
+				(conversationId === undefined || conversationId === sessionData.currentConversationId)) {
+				// For now, return a basic title - this can be enhanced later
+				return {
+					title: `Conversation ${sessionData.currentConversationId}`,
+					timestamp: sessionData.lastActivity.toISOString()
+				};
 			}
 			return null;
 		} catch (error) {
-			console.error('Error getting topic title:', error);
+			console.error('Error getting conversation title:', error);
 			return null;
 		}
 	}
@@ -1599,7 +1617,7 @@ Title:`;
 	 * Generate a topic summary for a conversation asynchronously
 	 * This runs in the background and updates the topic title
 	 */
-	private async generateTopicSummary(sessionId: string, conversation: ChatMessage[]): Promise<string> {
+	private async generateTopicSummary(conversationId: string, conversation: ChatMessage[]): Promise<string> {
 		try {
 			// Only summarize if conversation has enough content
 			if (conversation.length < 3) {
@@ -1607,8 +1625,7 @@ Title:`;
 			}
 
 			// Get LLM instance for summarization
-			const llm = await this.getUserPreferredLLM();
-			llm.clearFormat();
+			const llm = await this.setupLLM();
 
 			// Create a summarization prompt
 			const conversationText = conversation
@@ -1655,14 +1672,14 @@ Title:`;
 			}
 
 			const sessionData = await this.getUserSession();
-			const sessionId = sessionData.sessionId;
+			const conversationId = sessionData.currentConversationId;
 			
-			if (!sessionId) {
+			if (!conversationId) {
 				return;
 			}
 
 			// Get current conversation
-			const conversation = await this.dialogueJournal.getConversation(user, sessionId);
+			const conversation = await this.dialogueJournal.getConversation(user, conversationId);
 			
 			// Only update if conversation has grown significantly
 			if (conversation.length < 5) {
@@ -1670,7 +1687,7 @@ Title:`;
 			}
 
 			// Generate summary in background (don't await)
-			this.generateTopicSummary(sessionId, conversation)
+			this.generateTopicSummary(conversationId, conversation)
 				.then(summary => {
 					console.log(`📝 Topic summary generated: ${summary}`);
 					// TODO: Store summary in session metadata or dialogue journal
@@ -1689,8 +1706,8 @@ Title:`;
 	 * Get enhanced topic information including AI-generated summary
 	 */
 	@roles('user')
-	public async getTopicInfo(sessionId?: string): Promise<{
-		sessionId: string;
+	public async getTopicInfo(conversationId?: string): Promise<{
+		conversationId: string;
 		title: string;
 		summary?: string;
 		lastActivity: string;
@@ -1704,7 +1721,7 @@ Title:`;
 				throw new Error('User not authenticated or dialogue journal not available');
 			}
 
-			const currentSessionId = sessionId || (await this.getUserSession()).sessionId;
+			const currentSessionId = conversationId || (await this.getUserSession()).currentConversationId;
 			if (!currentSessionId) {
 				throw new Error('No session ID available');
 			}
@@ -1713,7 +1730,7 @@ Title:`;
 			
 			if (conversation.length === 0) {
 				return {
-					sessionId: currentSessionId,
+					conversationId: currentSessionId,
 					title: 'Empty Topic',
 					lastActivity: new Date().toISOString(),
 					messageCount: 0
@@ -1739,7 +1756,7 @@ Title:`;
 			}
 
 			return {
-				sessionId: currentSessionId,
+				conversationId: currentSessionId,
 				title,
 				summary: aiSummary,
 				lastActivity: lastMessage.timestamp,
@@ -1766,13 +1783,13 @@ Title:`;
 			}
 
 			const sessionData = await this.getUserSession();
-			const sessionId = sessionData.sessionId;
+			const conversationId = sessionData.currentConversationId;
 			
-			if (!sessionId) {
+			if (!conversationId) {
 				return;
 			}
 
-			const conversation = await this.dialogueJournal.getConversation(user, sessionId);
+			const conversation = await this.dialogueJournal.getConversation(user, conversationId);
 			
 			// Trigger summarization at conversation milestones
 			const messageCount = conversation.length;
@@ -1796,7 +1813,7 @@ Title:`;
 	 * Archive a specific topic/session
 	 */
 	@roles('user')
-	public async archiveTopic(sessionId: string): Promise<boolean> {
+	public async archiveTopic(conversationId: string): Promise<boolean> {
 		try {
 			const user = await this.getCurrentUser();
 			if (!user || !this.dialogueJournal) {
@@ -1804,10 +1821,10 @@ Title:`;
 			}
 
 			// Get the conversation to archive
-			const conversation = await this.dialogueJournal.getConversation(user, sessionId);
+			const conversation = await this.dialogueJournal.getConversation(user, conversationId);
 			
 			if (conversation.length === 0) {
-				console.log(`ℹ️  No conversation to archive for session ${sessionId}`);
+				console.log(`ℹ️  No conversation to archive for session ${conversationId}`);
 				return false;
 			}
 
@@ -1817,7 +1834,7 @@ Title:`;
 				messageCount: conversation.length,
 				lastActivity: conversation[conversation.length - 1]?.timestamp,
 				title: this.extractTopicTitle(conversation),
-				sessionId: sessionId
+				conversationId: conversationId
 			};
 
 			// Store archive metadata in session data
@@ -1831,7 +1848,7 @@ Title:`;
 			await this.sessionProvider.setSession(user.id, sessionData);
 
 			// Clear the conversation (effectively archiving it)
-			await this.dialogueJournal.clearConversation(user, sessionId);
+			await this.dialogueJournal.clearConversation(user, conversationId);
 
 			console.log(`📦 Archived topic: ${archiveMetadata.title} (${archiveMetadata.messageCount} messages)`);
 			return true;
@@ -1849,14 +1866,14 @@ Title:`;
 	public async archiveCurrentTopic(): Promise<boolean> {
 		try {
 			const sessionData = await this.getUserSession();
-			const sessionId = sessionData.sessionId;
+			const conversationId = sessionData.currentConversationId;
 			
-			if (!sessionId) {
+			if (!conversationId) {
 				console.log('ℹ️  No current session to archive');
 				return false;
 			}
 
-			return await this.archiveTopic(sessionId);
+			return await this.archiveTopic(conversationId);
 		} catch (error) {
 			console.error('Error archiving current topic:', error);
 			return false;
@@ -1868,7 +1885,7 @@ Title:`;
 	 */
 	@roles('user')
 	public async listArchivedTopics(): Promise<Array<{
-		sessionId: string;
+		conversationId: string;
 		title: string;
 		archivedAt: string;
 		messageCount: number;
@@ -1909,21 +1926,17 @@ Title:`;
 			const archivedTopics = sessionData.archivedTopics || [];
 			
 			// Find the archived topic
-			const archivedTopic = archivedTopics.find((topic: any) => topic.sessionId === archivedSessionId);
+			const archivedTopic = archivedTopics.find((topic: any) => topic.conversationId === archivedSessionId);
 			if (!archivedTopic) {
 				console.log(`❌ Archived topic ${archivedSessionId} not found`);
 				return null;
 			}
 
 			// Create new session for restored topic
-			const now = new Date();
-			const dateStr = now.toISOString().split('T')[0];
-			const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
-			const randomSuffix = Math.random().toString(36).substr(2, 2);
-			const newSessionId = `restored-${dateStr}-${timeStr}-${randomSuffix}`;
+			const newSessionId = this.generateConversationId('restored');
 
 			// Update session data
-			sessionData.sessionId = newSessionId;
+			sessionData.currentConversationId = newSessionId;
 			await this.sessionProvider.setSession(user.id, sessionData);
 
 			// Add restoration message to new session
@@ -1934,7 +1947,7 @@ Title:`;
 				metadata: {
 					model: 'system',
 					reasoning: 'topic_restoration',
-					sessionId: newSessionId
+					conversationId: newSessionId
 				} as any
 			}, newSessionId);
 
@@ -1962,7 +1975,7 @@ Title:`;
 			const archivedTopics = sessionData.archivedTopics || [];
 			
 			// Find and remove the archived topic
-			const topicIndex = archivedTopics.findIndex((topic: any) => topic.sessionId === archivedSessionId);
+			const topicIndex = archivedTopics.findIndex((topic: any) => topic.conversationId === archivedSessionId);
 			if (topicIndex === -1) {
 				console.log(`❌ Archived topic ${archivedSessionId} not found`);
 				return false;
@@ -2011,33 +2024,26 @@ Title:`;
 	 */
 	public async chatOnce(systemPrompt: string, message: string): Promise<string> {
 		try {
-			const llm = await this.getUserPreferredLLM();
-			llm.clearFormat();
-
-			// Set system prompt only if provided
-			if (systemPrompt) {
-				llm.system(systemPrompt);
-			}
+			const llm = await this.setupLLM(systemPrompt);
 
 			llm.user(message);
 
 			const response = await llm.requestCompletion_();
 			return response.firstChoice;
 		} catch (error) {
-			const err = error as Error;
-			throw new Error(`LLM Error: ${err.message}`);
+			throw new Error(`LLM Error: ${this.handleLLMError(error)}`);
 		}
 	}
 
 	/**
 	 * Consolidated streaming chat method
-	 * Returns an AsyncGenerator of SimpleStreamPacket for consistent interface
-	 * Uses session-specific system prompts and session IDs when available
+	 * Returns an AsyncGenerator of DataPacket for consistent interface
+	 * Uses topic-specific system prompts and topic IDs when available
 	 */
 	public async *chatStreaming(message: string, options: {
 		reasoningEnabled?: boolean;
 		jsonOutput?: boolean;
-	} = {}): AsyncGenerator<SimpleStreamPacket> {
+	} = {}): AsyncGenerator<DataPacket> {
 		const startTime = Date.now();
 		let firstTokenTime: number | null = null;
 		let aiResponse = '';
@@ -2053,7 +2059,7 @@ Title:`;
 			// Get current user
 			const user = await this.getCurrentUser();
 			if (!user) {
-				yield new SimpleStreamPacket('error', '', 'User not authenticated');
+				yield new DataPacket('auth', '', '', 'User not authenticated');
 				return;
 			}
 			
@@ -2062,23 +2068,19 @@ Title:`;
 				this.updateUserActivity(user.id);
 			}
 			
-			// Get system prompt and session ID from session data
+			// Get system prompt and topic ID from session data
 			const sessionData = await this.getUserSession();
 			const systemPrompt = sessionData.systemPrompt;
-			const sessionId = sessionData.sessionId;
+			const conversationId = sessionData.currentConversationId;
 			
 			// Add user message to dialogue journal if available
 			if (this.dialogueJournal) {
-				await this.dialogueJournal.addMessage(user, { 
-					role: 'user', 
-					content: message,
-					timestamp: new Date().toISOString()
-				}, sessionId);
+				await this.dialogueJournal.addMessageForUser(user, message, conversationId);
 			}
 			
 			// Load conversation history from dialogue journal or use empty array
 			const history = this.dialogueJournal 
-				? await this.dialogueJournal.getConversation(user, sessionId)
+				? await this.dialogueJournal.getConversation(user, conversationId)
 				: [];
 			
 			// Get LLM instance to capture configuration
@@ -2090,7 +2092,7 @@ Title:`;
 				reasoningEnabled: llm.reasoningEnabled
 			};
 			
-			// Use the SimpleStreamPacket streaming method to maintain proper reasoning/content handling
+			// Use the DataPacket streaming method to maintain proper reasoning/content handling
 			for await (const packet of this.streamLLMWithSimplePackets(message, history, {
 				reasoningEnabled: options.reasoningEnabled,
 				jsonOutput: options.jsonOutput,
@@ -2118,9 +2120,7 @@ Title:`;
 			// Add AI response to dialogue journal with enhanced metadata if we have content
 			if (this.dialogueJournal && aiResponse.trim()) {
 				// Calculate performance metrics
-				const processingTime = Date.now() - startTime;
-				const firstTokenLatency = firstTokenTime ? firstTokenTime - startTime : 0;
-				const tokensPerSecond = tokenUsage ? (tokenUsage.total_tokens / (processingTime / 1000)) : 0;
+				const metrics = this.calculatePerformanceMetrics(startTime, firstTokenTime, tokenUsage);
 				
 				await this.dialogueJournal.addMessage(user, { 
 					role: 'assistant', 
@@ -2138,36 +2138,35 @@ Title:`;
 							cached: tokenUsage.cached_input_tokens || 0
 						} : null,
 						performance: {
-							processingTimeMs: processingTime,
-							firstTokenLatencyMs: firstTokenLatency,
-							tokensPerSecond: Math.round(tokensPerSecond)
+							processingTimeMs: metrics.processingTime,
+							firstTokenLatencyMs: metrics.firstTokenLatency,
+							tokensPerSecond: Math.round(metrics.tokensPerSecond)
 						},
 						config: llmConfig,
 						response: {
 							finishReason: 'stop', // Default for streaming
 							responseId: `resp_${Date.now()}`
 						},
-						sessionId: sessionId
+						conversationId: conversationId
 					}
-				}, sessionId);
+				}, conversationId);
 
 				// Topic title generation is now client-initiated
 			}
 		} catch (error) {
-			const err = error as Error;
-			yield new SimpleStreamPacket('error', '', `Error: ${err.message}`);
+			yield this.handleLLMErrorAsPacket(error, 'llm');
 		}
 	}
 
 	/**
 	 * Consolidated non-streaming chat method
-	 * Returns a Promise of SimpleStreamPacket for consistent interface
-	 * Uses session-specific system prompts and session IDs when available
+	 * Returns a Promise of DataPacket for consistent interface
+	 * Uses topic-specific system prompts and topic IDs when available
 	 */
 	public async chat(message: string, options: {
 		reasoningEnabled?: boolean;
 		jsonOutput?: boolean;
-	} = {}): Promise<SimpleStreamPacket> {
+	} = {}): Promise<DataPacket> {
 		const startTime = Date.now();
 		let tokenUsage: any = null;
 		let finishReason = 'unknown';
@@ -2188,27 +2187,23 @@ Title:`;
 				this.updateUserActivity(user.id);
 			}
 			
-			// Get system prompt and session ID from session data
+			// Get system prompt and topic ID from session data
 			const sessionData = await this.getUserSession();
 			const systemPrompt = sessionData.systemPrompt;
-			const sessionId = sessionData.sessionId;
+			const conversationId = sessionData.currentConversationId;
 			
 			// Add user message to dialogue journal if available
 			if (this.dialogueJournal) {
-				await this.dialogueJournal.addMessage(user, { 
-					role: 'user', 
-					content: message,
-					timestamp: new Date().toISOString()
-				}, sessionId);
+				await this.dialogueJournal.addMessageForUser(user, message, conversationId);
 			}
 			
 			// Load conversation history from dialogue journal or use empty array
 			const history = this.dialogueJournal 
-				? await this.dialogueJournal.getConversation(user, sessionId)
+				? await this.dialogueJournal.getConversation(user, conversationId)
 				: [];
 			
 			// Get LLM instance to capture configuration
-			const llm = await this.getUserPreferredLLM();
+			const llm = await this.setupLLM(systemPrompt);
 			llmModel = llm.model;
 			llmConfig = {
 				temperature: llm.temperature,
@@ -2216,23 +2211,8 @@ Title:`;
 				reasoningEnabled: llm.reasoningEnabled
 			};
 			
-			llm.clearFormat();
-			
-			// Set system prompt only if provided
-			if (systemPrompt) {
-			llm.system(systemPrompt);
-			}
-
 			// Load conversation history into LLM context
-			for (const msg of history) {
-				if (msg.role === 'user') {
-					llm.user(msg.content);
-				} else if (msg.role === 'assistant') {
-					llm.assistant(msg.content);
-				} else if (msg.role === 'system') {
-					llm.system(msg.content);
-				}
-			}
+			this.loadConversationHistory(llm, history);
 
 			// Add current message
 			llm.user(message);
@@ -2258,7 +2238,7 @@ Title:`;
 			// Add AI response to dialogue journal with enhanced metadata if available
 			if (this.dialogueJournal && aiResponse.trim()) {
 				// Calculate performance metrics
-				const processingTime = Date.now() - startTime;
+				const metrics = this.calculatePerformanceMetrics(startTime, null, tokenUsage);
 				
 				await this.dialogueJournal.addMessage(user, { 
 					role: 'assistant', 
@@ -2275,36 +2255,35 @@ Title:`;
 							cached: tokenUsage.cached_input_tokens || 0
 						} : null,
 						performance: {
-							processingTimeMs: processingTime,
+							processingTimeMs: metrics.processingTime,
 							firstTokenLatencyMs: 0, // Not applicable for non-streaming
-							tokensPerSecond: 0 // Will be calculated if tokenUsage is available
+							tokensPerSecond: Math.round(metrics.tokensPerSecond)
 						},
 						config: llmConfig,
 						response: {
 							finishReason,
 							responseId: responseId || `resp_${Date.now()}`
 						},
-						sessionId: sessionId
+						conversationId: conversationId
 					}
-				}, sessionId);
+				}, conversationId);
 
 				// Topic title generation is now client-initiated
 			}
 			
-			// Return as SimpleStreamPacket for consistent interface
-			return new SimpleStreamPacket('llm', '', aiResponse);
+			// Return as DataPacket for consistent interface
+			return new DataPacket('llm', '', aiResponse);
 		} catch (error) {
-			const err = error as Error;
-			return new SimpleStreamPacket('error', '', `LLM Error: ${err.message}`);
+			return new DataPacket('llm', '', '', this.handleLLMError(error));
 		}
 	}
 
 	/**
 	 * Start a new LLM session with a system prompt
 	 * This creates a new conversation journal file and sets up the assistant's role
-	 * Uses session-specific system prompts and session IDs when available
+	 * Uses topic-specific system prompts and topic IDs when available
 	 */
-	public async startSession(systemPrompt: string): Promise<boolean> {
+	public async startNewConversation(systemPrompt: string): Promise<boolean> {
 		try {
 			// Get current user
 			const user = await this.getCurrentUser();
@@ -2313,22 +2292,18 @@ Title:`;
 			}
 			
 			// Generate a human-readable session ID with date and time
-			const now = new Date();
-			const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
-			const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
-			const randomSuffix = Math.random().toString(36).substr(2, 2); // 2 random chars
-			const sessionId = `session-${dateStr}-${timeStr}-${randomSuffix}`;
+			const conversationId = this.generateConversationId('session');
 			
 			// Store the system prompt and session ID in the session data
 			const sessionData = await this.getUserSession();
 			sessionData.systemPrompt = systemPrompt;
-			sessionData.sessionId = sessionId;
+			sessionData.currentConversationId = conversationId;
 			await this.sessionProvider.setSession(user.id, sessionData);
 			
 			// Create a new journal file for this session
 			if (this.dialogueJournal) {
 				// Clear any existing conversation first
-				await this.dialogueJournal.clearConversation(user, sessionId);
+				await this.dialogueJournal.clearConversation(user, conversationId);
 				
 				// Add system prompt as the first entry in the new session
 				if (systemPrompt.trim()) {
@@ -2339,9 +2314,9 @@ Title:`;
 						metadata: {
 							model: 'system',
 							reasoning: 'session_start',
-							sessionId: sessionId
+							conversationId: conversationId
 						}
-					}, sessionId);
+					}, conversationId);
 				}
 			}
 			

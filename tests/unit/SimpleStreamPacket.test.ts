@@ -1,33 +1,33 @@
 import { describe, it, expect } from 'bun:test';
-import { SimpleStreamPacket } from '../../src/shared/SimpleStreamPacket';
+import { DataPacket } from '../../src/shared/DataPacket';
 import merge from 'it-merge';
 import all from 'it-all';
 import itFirst from 'it-first';
 import itTake from 'it-take';
 
-describe('SimpleStreamPacket', () => {
+describe('DataPacket', () => {
     describe('Basic functionality', () => {
         it('should create a packet with default values', () => {
-            const packet = new SimpleStreamPacket();
+            const packet = new DataPacket();
             expect(packet.source).toBe('');
             expect(packet.reasoning).toBe('');
             expect(packet.content).toBe('');
         });
 
         it('should create a packet with custom values', () => {
-            const packet = new SimpleStreamPacket('llm', 'I think...', 'Hello world');
+            const packet = new DataPacket('llm', 'I think...', 'Hello world');
             expect(packet.source).toBe('llm');
             expect(packet.reasoning).toBe('I think...');
             expect(packet.content).toBe('Hello world');
         });
 
         it('should create packets with partial values', () => {
-            const sourceOnly = new SimpleStreamPacket('llm');
+            const sourceOnly = new DataPacket('llm');
             expect(sourceOnly.source).toBe('llm');
             expect(sourceOnly.reasoning).toBe('');
             expect(sourceOnly.content).toBe('');
 
-            const sourceAndReasoning = new SimpleStreamPacket('llm', 'I think...');
+            const sourceAndReasoning = new DataPacket('llm', 'I think...');
             expect(sourceAndReasoning.source).toBe('llm');
             expect(sourceAndReasoning.reasoning).toBe('I think...');
             expect(sourceAndReasoning.content).toBe('');
@@ -37,12 +37,12 @@ describe('SimpleStreamPacket', () => {
     describe('Async iterator compatibility', () => {
         it('should work with async generators', async () => {
             async function* generatePackets() {
-                yield new SimpleStreamPacket('llm', 'I think...', 'Hello');
-                yield new SimpleStreamPacket('llm', 'Let me...', ' world');
-                yield new SimpleStreamPacket('llm', '', '!');
+                yield new DataPacket('llm', 'I think...', 'Hello');
+                yield new DataPacket('llm', 'Let me...', ' world');
+                yield new DataPacket('llm', '', '!');
             }
 
-            const packets: SimpleStreamPacket[] = [];
+            const packets: DataPacket[] = [];
             for await (const packet of generatePackets()) {
                 packets.push(packet);
             }
@@ -55,18 +55,18 @@ describe('SimpleStreamPacket', () => {
 
         it('should work with it-merge for multiple streams', async () => {
             async function* stream1() {
-                yield new SimpleStreamPacket('llm', 'I think...', 'Hello');
-                yield new SimpleStreamPacket('llm', 'Let me...', ' world');
+                yield new DataPacket('llm', 'I think...', 'Hello');
+                yield new DataPacket('llm', 'Let me...', ' world');
             }
 
             async function* stream2() {
-                yield new SimpleStreamPacket('user', '', 'How are you?');
-                yield new SimpleStreamPacket('user', '', ' Tell me more.');
+                yield new DataPacket('user', '', 'How are you?');
+                yield new DataPacket('user', '', ' Tell me more.');
             }
 
             // Merge streams
             const mergedStream = merge(stream1(), stream2());
-            const allPackets: SimpleStreamPacket[] = [];
+            const allPackets: DataPacket[] = [];
             for await (const packet of mergedStream) {
                 allPackets.push(packet);
             }
@@ -81,14 +81,14 @@ describe('SimpleStreamPacket', () => {
 
         it('should accumulate content from merged streams', async () => {
             async function* reasoningStream() {
-                yield new SimpleStreamPacket('llm', 'I need to think about this...', '');
-                yield new SimpleStreamPacket('llm', 'Let me analyze the problem...', '');
+                yield new DataPacket('llm', 'I need to think about this...', '');
+                yield new DataPacket('llm', 'Let me analyze the problem...', '');
             }
 
             async function* contentStream() {
-                yield new SimpleStreamPacket('llm', '', 'Hello');
-                yield new SimpleStreamPacket('llm', '', ' world');
-                yield new SimpleStreamPacket('llm', '', '!');
+                yield new DataPacket('llm', '', 'Hello');
+                yield new DataPacket('llm', '', ' world');
+                yield new DataPacket('llm', '', '!');
             }
 
             const mergedStream = merge(reasoningStream(), contentStream());
@@ -113,7 +113,7 @@ describe('SimpleStreamPacket', () => {
             }
 
             async function* nonEmptyStream() {
-                yield new SimpleStreamPacket('llm', '', 'Hello');
+                yield new DataPacket('llm', '', 'Hello');
             }
 
             const mergedStream = merge(emptyStream(), nonEmptyStream());
@@ -127,18 +127,18 @@ describe('SimpleStreamPacket', () => {
     describe('Real-world scenarios', () => {
         it('should simulate a chat conversation', async () => {
             async function* userMessages() {
-                yield new SimpleStreamPacket('user', '', 'Hello, how are you?');
-                yield new SimpleStreamPacket('user', '', ' Tell me about AI.');
+                yield new DataPacket('user', '', 'Hello, how are you?');
+                yield new DataPacket('user', '', ' Tell me about AI.');
             }
 
             async function* llmReasoning() {
-                yield new SimpleStreamPacket('llm', 'The user is asking about my status...', '');
-                yield new SimpleStreamPacket('llm', 'Now they want to know about AI...', '');
+                yield new DataPacket('llm', 'The user is asking about my status...', '');
+                yield new DataPacket('llm', 'Now they want to know about AI...', '');
             }
 
             async function* llmResponse() {
-                yield new SimpleStreamPacket('llm', '', 'I am doing well, thank you!');
-                yield new SimpleStreamPacket('llm', '', ' AI is a fascinating field...');
+                yield new DataPacket('llm', '', 'I am doing well, thank you!');
+                yield new DataPacket('llm', '', ' AI is a fascinating field...');
             }
 
             const conversationStream = merge(userMessages(), llmReasoning(), llmResponse());
@@ -165,18 +165,18 @@ describe('SimpleStreamPacket', () => {
 
         it('should work with different packet types', async () => {
             async function* sourceOnlyStream() {
-                yield new SimpleStreamPacket('llm');
-                yield new SimpleStreamPacket('user');
+                yield new DataPacket('llm');
+                yield new DataPacket('user');
             }
 
             async function* reasoningOnlyStream() {
-                yield new SimpleStreamPacket('llm', 'I think...');
-                yield new SimpleStreamPacket('llm', 'Let me...');
+                yield new DataPacket('llm', 'I think...');
+                yield new DataPacket('llm', 'Let me...');
             }
 
             async function* contentOnlyStream() {
-                yield new SimpleStreamPacket('llm', '', 'Hello');
-                yield new SimpleStreamPacket('llm', '', ' world');
+                yield new DataPacket('llm', '', 'Hello');
+                yield new DataPacket('llm', '', ' world');
             }
 
             const mergedStream = merge(
@@ -200,7 +200,7 @@ describe('SimpleStreamPacket', () => {
 
         it('should handle error scenarios gracefully', async () => {
             async function* normalStream() {
-                yield new SimpleStreamPacket('llm', '', 'Hello');
+                yield new DataPacket('llm', '', 'Hello');
             }
 
             async function* errorStream() {
@@ -221,27 +221,27 @@ describe('SimpleStreamPacket', () => {
     describe('Randomized delays and timing', () => {
         it('should handle streams with random delays', async () => {
             async function* fastStream() {
-                yield new SimpleStreamPacket('fast', '', 'Fast1');
+                yield new DataPacket('fast', '', 'Fast1');
                 await new Promise(resolve => setTimeout(resolve, 10));
-                yield new SimpleStreamPacket('fast', '', 'Fast2');
+                yield new DataPacket('fast', '', 'Fast2');
                 await new Promise(resolve => setTimeout(resolve, 5));
-                yield new SimpleStreamPacket('fast', '', 'Fast3');
+                yield new DataPacket('fast', '', 'Fast3');
             }
 
             async function* slowStream() {
                 await new Promise(resolve => setTimeout(resolve, 50));
-                yield new SimpleStreamPacket('slow', '', 'Slow1');
+                yield new DataPacket('slow', '', 'Slow1');
                 await new Promise(resolve => setTimeout(resolve, 30));
-                yield new SimpleStreamPacket('slow', '', 'Slow2');
+                yield new DataPacket('slow', '', 'Slow2');
                 await new Promise(resolve => setTimeout(resolve, 20));
-                yield new SimpleStreamPacket('slow', '', 'Slow3');
+                yield new DataPacket('slow', '', 'Slow3');
             }
 
             async function* randomStream() {
                 const delays = [5, 25, 15, 35, 10];
                 for (let i = 0; i < delays.length; i++) {
                     await new Promise(resolve => setTimeout(resolve, delays[i]));
-                    yield new SimpleStreamPacket('random', '', `Random${i + 1}`);
+                    yield new DataPacket('random', '', `Random${i + 1}`);
                 }
             }
 
@@ -266,17 +266,17 @@ describe('SimpleStreamPacket', () => {
         it('should handle streams with varying delay patterns', async () => {
             async function* burstStream() {
                 // Burst of packets, then long delay
-                yield new SimpleStreamPacket('burst', '', 'Burst1');
-                yield new SimpleStreamPacket('burst', '', 'Burst2');
-                yield new SimpleStreamPacket('burst', '', 'Burst3');
+                yield new DataPacket('burst', '', 'Burst1');
+                yield new DataPacket('burst', '', 'Burst2');
+                yield new DataPacket('burst', '', 'Burst3');
                 await new Promise(resolve => setTimeout(resolve, 100));
-                yield new SimpleStreamPacket('burst', '', 'Burst4');
+                yield new DataPacket('burst', '', 'Burst4');
             }
 
             async function* steadyStream() {
                 // Steady stream with consistent delays
                 for (let i = 1; i <= 4; i++) {
-                    yield new SimpleStreamPacket('steady', '', `Steady${i}`);
+                    yield new DataPacket('steady', '', `Steady${i}`);
                     await new Promise(resolve => setTimeout(resolve, 25));
                 }
             }
@@ -286,7 +286,7 @@ describe('SimpleStreamPacket', () => {
                 const delays = [5, 50, 10, 30, 15];
                 for (let i = 0; i < delays.length; i++) {
                     await new Promise(resolve => setTimeout(resolve, delays[i]));
-                    yield new SimpleStreamPacket('erratic', '', `Erratic${i + 1}`);
+                    yield new DataPacket('erratic', '', `Erratic${i + 1}`);
                 }
             }
 
@@ -332,7 +332,7 @@ describe('SimpleStreamPacket', () => {
                 for (let i = 0; i < reasoningSteps.length; i++) {
                     const delay = Math.random() * 50 + 10; // 10-60ms random delay
                     await new Promise(resolve => setTimeout(resolve, delay));
-                    yield new SimpleStreamPacket('llm', reasoningSteps[i], '');
+                    yield new DataPacket('llm', reasoningSteps[i], '');
                 }
             }
 
@@ -342,7 +342,7 @@ describe('SimpleStreamPacket', () => {
                 for (let i = 0; i < contentParts.length; i++) {
                     const delay = Math.random() * 30 + 5; // 5-35ms random delay
                     await new Promise(resolve => setTimeout(resolve, delay));
-                    yield new SimpleStreamPacket('llm', '', contentParts[i]);
+                    yield new DataPacket('llm', '', contentParts[i]);
                 }
             }
 
@@ -352,7 +352,7 @@ describe('SimpleStreamPacket', () => {
                 for (let i = 0; i < metadata.length; i++) {
                     const delay = Math.random() * 40 + 15; // 15-55ms random delay
                     await new Promise(resolve => setTimeout(resolve, delay));
-                    yield new SimpleStreamPacket('system', metadata[i], '');
+                    yield new DataPacket('system', metadata[i], '');
                 }
             }
 
@@ -383,30 +383,30 @@ describe('SimpleStreamPacket', () => {
 
         it('should handle concurrent streams with different completion times', async () => {
             async function* quickStream() {
-                yield new SimpleStreamPacket('quick', '', 'Quick1');
+                yield new DataPacket('quick', '', 'Quick1');
                 await new Promise(resolve => setTimeout(resolve, 10));
-                yield new SimpleStreamPacket('quick', '', 'Quick2');
+                yield new DataPacket('quick', '', 'Quick2');
                 // Stream completes quickly
             }
 
             async function* mediumStream() {
                 await new Promise(resolve => setTimeout(resolve, 20));
-                yield new SimpleStreamPacket('medium', '', 'Medium1');
+                yield new DataPacket('medium', '', 'Medium1');
                 await new Promise(resolve => setTimeout(resolve, 30));
-                yield new SimpleStreamPacket('medium', '', 'Medium2');
+                yield new DataPacket('medium', '', 'Medium2');
                 await new Promise(resolve => setTimeout(resolve, 20));
-                yield new SimpleStreamPacket('medium', '', 'Medium3');
+                yield new DataPacket('medium', '', 'Medium3');
             }
 
             async function* longStream() {
                 await new Promise(resolve => setTimeout(resolve, 50));
-                yield new SimpleStreamPacket('long', '', 'Long1');
+                yield new DataPacket('long', '', 'Long1');
                 await new Promise(resolve => setTimeout(resolve, 40));
-                yield new SimpleStreamPacket('long', '', 'Long2');
+                yield new DataPacket('long', '', 'Long2');
                 await new Promise(resolve => setTimeout(resolve, 30));
-                yield new SimpleStreamPacket('long', '', 'Long3');
+                yield new DataPacket('long', '', 'Long3');
                 await new Promise(resolve => setTimeout(resolve, 20));
-                yield new SimpleStreamPacket('long', '', 'Long4');
+                yield new DataPacket('long', '', 'Long4');
             }
 
             const startTime = Date.now();
@@ -450,7 +450,7 @@ describe('SimpleStreamPacket', () => {
                 for (let i = 1; i <= 3; i++) {
                     const delay = Math.random() * 20 + 5; // 5-25ms random delay
                     await new Promise(resolve => setTimeout(resolve, delay));
-                    yield new SimpleStreamPacket('reliable', '', `Reliable${i}`);
+                    yield new DataPacket('reliable', '', `Reliable${i}`);
                 }
             }
 
@@ -460,9 +460,9 @@ describe('SimpleStreamPacket', () => {
                     await new Promise(resolve => setTimeout(resolve, delays[i]));
                     if (i === 2) {
                         // Simulate a temporary issue, but recover
-                        yield new SimpleStreamPacket('unreliable', '', `Unreliable${i + 1}-retry`);
+                        yield new DataPacket('unreliable', '', `Unreliable${i + 1}-retry`);
                     } else {
-                        yield new SimpleStreamPacket('unreliable', '', `Unreliable${i + 1}`);
+                        yield new DataPacket('unreliable', '', `Unreliable${i + 1}`);
                     }
                 }
             }
@@ -495,17 +495,17 @@ describe('SimpleStreamPacket', () => {
     describe('Real-world error scenarios and timeouts', () => {
         it('should handle timeout scenarios with it-first', async () => {
             async function* fastStream() {
-                yield new SimpleStreamPacket('fast', '', 'Fast response');
+                yield new DataPacket('fast', '', 'Fast response');
             }
 
             async function* slowStream() {
                 await new Promise(resolve => setTimeout(resolve, 200));
-                yield new SimpleStreamPacket('slow', '', 'Slow response');
+                yield new DataPacket('slow', '', 'Slow response');
             }
 
             async function* timeoutStream() {
                 await new Promise(resolve => setTimeout(resolve, 100));
-                yield new SimpleStreamPacket('timeout', '', 'Timeout response');
+                yield new DataPacket('timeout', '', 'Timeout response');
             }
 
             // Use it-first to get the first result (like Promise.race)
@@ -518,18 +518,18 @@ describe('SimpleStreamPacket', () => {
 
         it('should handle partial failures with it-all', async () => {
             async function* reliableStream() {
-                yield new SimpleStreamPacket('reliable', '', 'Reliable1');
-                yield new SimpleStreamPacket('reliable', '', 'Reliable2');
+                yield new DataPacket('reliable', '', 'Reliable1');
+                yield new DataPacket('reliable', '', 'Reliable2');
             }
 
             async function* failingStream() {
-                yield new SimpleStreamPacket('failing', '', 'Failing1');
+                yield new DataPacket('failing', '', 'Failing1');
                 throw new Error('Stream failed');
             }
 
             async function* recoveryStream() {
                 await new Promise(resolve => setTimeout(resolve, 50));
-                yield new SimpleStreamPacket('recovery', '', 'Recovery1');
+                yield new DataPacket('recovery', '', 'Recovery1');
             }
 
             try {
@@ -547,13 +547,13 @@ describe('SimpleStreamPacket', () => {
                 let count = 0;
                 while (true) {
                     await new Promise(resolve => setTimeout(resolve, 10));
-                    yield new SimpleStreamPacket('infinite', '', `Item${count++}`);
+                    yield new DataPacket('infinite', '', `Item${count++}`);
                 }
             }
 
             async function* finiteStream() {
-                yield new SimpleStreamPacket('finite', '', 'Finite1');
-                yield new SimpleStreamPacket('finite', '', 'Finite2');
+                yield new DataPacket('finite', '', 'Finite1');
+                yield new DataPacket('finite', '', 'Finite2');
             }
 
             // Use it-take to limit results (timeout-like behavior)
@@ -570,25 +570,25 @@ describe('SimpleStreamPacket', () => {
 
         it('should handle concurrent processing with error recovery', async () => {
             async function* stream1() {
-                yield new SimpleStreamPacket('stream1', '', 'Item1');
+                yield new DataPacket('stream1', '', 'Item1');
                 await new Promise(resolve => setTimeout(resolve, 20));
-                yield new SimpleStreamPacket('stream1', '', 'Item2');
+                yield new DataPacket('stream1', '', 'Item2');
             }
 
             async function* stream2() {
                 await new Promise(resolve => setTimeout(resolve, 10));
-                yield new SimpleStreamPacket('stream2', '', 'Item1');
+                yield new DataPacket('stream2', '', 'Item1');
                 throw new Error('Stream2 failed');
             }
 
             async function* stream3() {
                 await new Promise(resolve => setTimeout(resolve, 30));
-                yield new SimpleStreamPacket('stream3', '', 'Item1');
-                yield new SimpleStreamPacket('stream3', '', 'Item2');
+                yield new DataPacket('stream3', '', 'Item1');
+                yield new DataPacket('stream3', '', 'Item2');
             }
 
             // Process streams with error handling
-            const results: SimpleStreamPacket[] = [];
+            const results: DataPacket[] = [];
             const errors: Error[] = [];
 
             try {
@@ -614,23 +614,23 @@ describe('SimpleStreamPacket', () => {
                     if (i === 2) {
                         throw new Error('Network timeout');
                     }
-                    yield new SimpleStreamPacket('network', '', `Network${i + 1}`);
+                    yield new DataPacket('network', '', `Network${i + 1}`);
                 }
             }
 
             async function* localStream() {
-                yield new SimpleStreamPacket('local', '', 'Local1');
+                yield new DataPacket('local', '', 'Local1');
                 await new Promise(resolve => setTimeout(resolve, 25));
-                yield new SimpleStreamPacket('local', '', 'Local2');
+                yield new DataPacket('local', '', 'Local2');
             }
 
             async function* cacheStream() {
-                yield new SimpleStreamPacket('cache', '', 'Cache1');
+                yield new DataPacket('cache', '', 'Cache1');
                 await new Promise(resolve => setTimeout(resolve, 75));
-                yield new SimpleStreamPacket('cache', '', 'Cache2');
+                yield new DataPacket('cache', '', 'Cache2');
             }
 
-            const results: SimpleStreamPacket[] = [];
+            const results: DataPacket[] = [];
             let networkError: Error | null = null;
 
             try {
@@ -656,7 +656,7 @@ describe('SimpleStreamPacket', () => {
         it('should handle resource exhaustion scenarios', async () => {
             async function* memoryIntensiveStream() {
                 for (let i = 0; i < 1000; i++) {
-                    yield new SimpleStreamPacket('memory', '', `Data${i}`);
+                    yield new DataPacket('memory', '', `Data${i}`);
                     if (i % 100 === 0) {
                         await new Promise(resolve => setTimeout(resolve, 1));
                     }
@@ -664,8 +664,8 @@ describe('SimpleStreamPacket', () => {
             }
 
             async function* normalStream() {
-                yield new SimpleStreamPacket('normal', '', 'Normal1');
-                yield new SimpleStreamPacket('normal', '', 'Normal2');
+                yield new DataPacket('normal', '', 'Normal1');
+                yield new DataPacket('normal', '', 'Normal2');
             }
 
             // Use it-take to prevent memory exhaustion
@@ -685,8 +685,8 @@ describe('SimpleStreamPacket', () => {
             
             async function* streamWithCleanup() {
                 try {
-                    yield new SimpleStreamPacket('cleanup', '', 'Item1');
-                    yield new SimpleStreamPacket('cleanup', '', 'Item2');
+                    yield new DataPacket('cleanup', '', 'Item1');
+                    yield new DataPacket('cleanup', '', 'Item2');
                     throw new Error('Stream error');
                 } finally {
                     cleanupCalled = true;
@@ -694,7 +694,7 @@ describe('SimpleStreamPacket', () => {
             }
 
             async function* normalStream() {
-                yield new SimpleStreamPacket('normal', '', 'Normal1');
+                yield new DataPacket('normal', '', 'Normal1');
             }
 
             try {
@@ -710,22 +710,22 @@ describe('SimpleStreamPacket', () => {
 
         it('should handle Promise.allSettled-like behavior', async () => {
             async function* successStream() {
-                yield new SimpleStreamPacket('success', '', 'Success1');
-                yield new SimpleStreamPacket('success', '', 'Success2');
+                yield new DataPacket('success', '', 'Success1');
+                yield new DataPacket('success', '', 'Success2');
             }
 
             async function* failureStream() {
-                yield new SimpleStreamPacket('failure', '', 'Failure1');
+                yield new DataPacket('failure', '', 'Failure1');
                 throw new Error('Failure stream error');
             }
 
             async function* delayedStream() {
                 await new Promise(resolve => setTimeout(resolve, 50));
-                yield new SimpleStreamPacket('delayed', '', 'Delayed1');
+                yield new DataPacket('delayed', '', 'Delayed1');
             }
 
             // Simulate Promise.allSettled behavior
-            const results: { success: SimpleStreamPacket[], errors: Error[] } = {
+            const results: { success: DataPacket[], errors: Error[] } = {
                 success: [],
                 errors: []
             };
@@ -751,13 +751,13 @@ describe('SimpleStreamPacket', () => {
         it('should demonstrate it collection Promise equivalents', async () => {
             // Promise.all equivalent - collect all results
             async function* stream1() {
-                yield new SimpleStreamPacket('stream1', '', 'Item1');
-                yield new SimpleStreamPacket('stream1', '', 'Item2');
+                yield new DataPacket('stream1', '', 'Item1');
+                yield new DataPacket('stream1', '', 'Item2');
             }
 
             async function* stream2() {
-                yield new SimpleStreamPacket('stream2', '', 'Item1');
-                yield new SimpleStreamPacket('stream2', '', 'Item2');
+                yield new DataPacket('stream2', '', 'Item1');
+                yield new DataPacket('stream2', '', 'Item2');
             }
 
             // it-all (Promise.all equivalent)
@@ -767,12 +767,12 @@ describe('SimpleStreamPacket', () => {
 
             // it-first (Promise.race equivalent)
             async function* fastStream() {
-                yield new SimpleStreamPacket('fast', '', 'Fast result');
+                yield new DataPacket('fast', '', 'Fast result');
             }
 
             async function* slowStream() {
                 await new Promise(resolve => setTimeout(resolve, 100));
-                yield new SimpleStreamPacket('slow', '', 'Slow result');
+                yield new DataPacket('slow', '', 'Slow result');
             }
 
             const raceStream = merge(fastStream(), slowStream());
@@ -783,7 +783,7 @@ describe('SimpleStreamPacket', () => {
             async function* infiniteStream() {
                 let count = 0;
                 while (true) {
-                    yield new SimpleStreamPacket('infinite', '', `Item${count++}`);
+                    yield new DataPacket('infinite', '', `Item${count++}`);
                 }
             }
 
@@ -804,7 +804,7 @@ describe('SimpleStreamPacket', () => {
                 
                 for (const step of reasoningSteps) {
                     await new Promise(resolve => setTimeout(resolve, 100)); // Thinking time
-                    yield new SimpleStreamPacket('llm', step, '');
+                    yield new DataPacket('llm', step, '');
                 }
             }
 
@@ -815,7 +815,7 @@ describe('SimpleStreamPacket', () => {
                 const response = "Based on my analysis, here's my answer to your question: The solution involves...";
                 for (let i = 0; i < response.length; i++) {
                     await new Promise(resolve => setTimeout(resolve, 20)); // Typing speed
-                    yield new SimpleStreamPacket('llm', '', response[i]);
+                    yield new DataPacket('llm', '', response[i]);
                 }
             }
 
@@ -824,7 +824,7 @@ describe('SimpleStreamPacket', () => {
                 const userMessage = "Thank you for the detailed explanation!";
                 for (let i = 0; i < userMessage.length; i++) {
                     await new Promise(resolve => setTimeout(resolve, 50)); // User typing
-                    yield new SimpleStreamPacket('user', '', userMessage[i]);
+                    yield new DataPacket('user', '', userMessage[i]);
                 }
             }
 
@@ -863,7 +863,7 @@ describe('SimpleStreamPacket', () => {
                 const question = "What is the capital of France?";
                 for (let i = 0; i < question.length; i++) {
                     await new Promise(resolve => setTimeout(resolve, 30));
-                    yield new SimpleStreamPacket('user', '', question[i]);
+                    yield new DataPacket('user', '', question[i]);
                 }
             }
 
@@ -877,7 +877,7 @@ describe('SimpleStreamPacket', () => {
                 
                 for (const step of reasoning) {
                     await new Promise(resolve => setTimeout(resolve, 80));
-                    yield new SimpleStreamPacket('llm', step, '');
+                    yield new DataPacket('llm', step, '');
                 }
             }
 
@@ -888,7 +888,7 @@ describe('SimpleStreamPacket', () => {
                 const response = "The capital of France is Paris.";
                 for (let i = 0; i < response.length; i++) {
                     await new Promise(resolve => setTimeout(resolve, 25));
-                    yield new SimpleStreamPacket('llm', '', response[i]);
+                    yield new DataPacket('llm', '', response[i]);
                 }
             }
 
@@ -899,7 +899,7 @@ describe('SimpleStreamPacket', () => {
                 const followUp = "What about Germany?";
                 for (let i = 0; i < followUp.length; i++) {
                     await new Promise(resolve => setTimeout(resolve, 30));
-                    yield new SimpleStreamPacket('user', '', followUp[i]);
+                    yield new DataPacket('user', '', followUp[i]);
                 }
             }
 
@@ -914,7 +914,7 @@ describe('SimpleStreamPacket', () => {
                 
                 for (const step of reasoning) {
                     await new Promise(resolve => setTimeout(resolve, 80));
-                    yield new SimpleStreamPacket('llm', step, '');
+                    yield new DataPacket('llm', step, '');
                 }
             }
 
@@ -925,7 +925,7 @@ describe('SimpleStreamPacket', () => {
                 const response = "The capital of Germany is Berlin.";
                 for (let i = 0; i < response.length; i++) {
                     await new Promise(resolve => setTimeout(resolve, 25));
-                    yield new SimpleStreamPacket('llm', '', response[i]);
+                    yield new DataPacket('llm', '', response[i]);
                 }
             }
 
@@ -974,7 +974,7 @@ describe('SimpleStreamPacket', () => {
                 
                 for (const thought of internalThoughts) {
                     await new Promise(resolve => setTimeout(resolve, 150));
-                    yield new SimpleStreamPacket('system', thought, '');
+                    yield new DataPacket('system', thought, '');
                 }
             }
 
@@ -986,7 +986,7 @@ describe('SimpleStreamPacket', () => {
                 const content = "Here's my response based on my analysis...";
                 for (let i = 0; i < content.length; i++) {
                     await new Promise(resolve => setTimeout(resolve, 30));
-                    yield new SimpleStreamPacket('llm', '', content[i]);
+                    yield new DataPacket('llm', '', content[i]);
                 }
             }
 
@@ -1032,7 +1032,7 @@ describe('SimpleStreamPacket', () => {
                             throw new Error('Stream cancelled by client');
                         }
                         await new Promise(resolve => setTimeout(resolve, 50));
-                        yield new SimpleStreamPacket('stream', '', `Item${i}`);
+                        yield new DataPacket('stream', '', `Item${i}`);
                     }
                 } catch (error) {
                     cancellationNotified = true;
@@ -1043,12 +1043,12 @@ describe('SimpleStreamPacket', () => {
             async function* normalStream() {
                 for (let i = 0; i < 5; i++) {
                     await new Promise(resolve => setTimeout(resolve, 30));
-                    yield new SimpleStreamPacket('normal', '', `Normal${i}`);
+                    yield new DataPacket('normal', '', `Normal${i}`);
                 }
             }
 
             const mergedStream = merge(cancellableStream(), normalStream());
-            const results: SimpleStreamPacket[] = [];
+            const results: DataPacket[] = [];
             let error: Error | null = null;
 
             // Start consuming the stream
@@ -1092,7 +1092,7 @@ describe('SimpleStreamPacket', () => {
                             throw new Error('Stream1 cancelled');
                         }
                         await new Promise(resolve => setTimeout(resolve, 40));
-                        yield new SimpleStreamPacket('stream1', '', `S1-${i}`);
+                        yield new DataPacket('stream1', '', `S1-${i}`);
                     }
                 } catch (error) {
                     cancellationFlags.stream1 = true;
@@ -1108,7 +1108,7 @@ describe('SimpleStreamPacket', () => {
                             throw new Error('Stream2 cancelled');
                         }
                         await new Promise(resolve => setTimeout(resolve, 60));
-                        yield new SimpleStreamPacket('stream2', '', `S2-${i}`);
+                        yield new DataPacket('stream2', '', `S2-${i}`);
                     }
                 } catch (error) {
                     cancellationFlags.stream2 = true;
@@ -1124,7 +1124,7 @@ describe('SimpleStreamPacket', () => {
                             throw new Error('Stream3 cancelled');
                         }
                         await new Promise(resolve => setTimeout(resolve, 80));
-                        yield new SimpleStreamPacket('stream3', '', `S3-${i}`);
+                        yield new DataPacket('stream3', '', `S3-${i}`);
                     }
                 } catch (error) {
                     cancellationFlags.stream3 = true;
@@ -1133,7 +1133,7 @@ describe('SimpleStreamPacket', () => {
             }
 
             const mergedStream = merge(stream1(), stream2(), stream3());
-            const results: SimpleStreamPacket[] = [];
+            const results: DataPacket[] = [];
             let error: Error | null = null;
 
             // Start consuming
@@ -1179,7 +1179,7 @@ describe('SimpleStreamPacket', () => {
                             throw new Error('Stream cancelled');
                         }
                         await new Promise(resolve => setTimeout(resolve, 30));
-                        yield new SimpleStreamPacket('cleanup', '', `Cleanup${i}`);
+                        yield new DataPacket('cleanup', '', `Cleanup${i}`);
                     }
                 } finally {
                     cleanupFlags.stream1 = true;
@@ -1195,7 +1195,7 @@ describe('SimpleStreamPacket', () => {
                             throw new Error('Resource stream cancelled');
                         }
                         await new Promise(resolve => setTimeout(resolve, 50));
-                        yield new SimpleStreamPacket('resource', '', `Resource${i}`);
+                        yield new DataPacket('resource', '', `Resource${i}`);
                     }
                 } finally {
                     cleanupFlags.stream2 = true;
@@ -1204,7 +1204,7 @@ describe('SimpleStreamPacket', () => {
             }
 
             const mergedStream = merge(streamWithCleanup(), resourceStream());
-            const results: SimpleStreamPacket[] = [];
+            const results: DataPacket[] = [];
             let error: Error | null = null;
 
             // Start consuming
@@ -1250,7 +1250,7 @@ describe('SimpleStreamPacket', () => {
                             throw new Error('Stream cancelled or timed out');
                         }
                         await new Promise(resolve => setTimeout(resolve, 30));
-                        yield new SimpleStreamPacket('timeout', '', `Timeout${i}`);
+                        yield new DataPacket('timeout', '', `Timeout${i}`);
                     }
                 } catch (error) {
                     throw error;
@@ -1260,12 +1260,12 @@ describe('SimpleStreamPacket', () => {
             async function* normalStream() {
                 for (let i = 0; i < 5; i++) {
                     await new Promise(resolve => setTimeout(resolve, 40));
-                    yield new SimpleStreamPacket('normal', '', `Normal${i}`);
+                    yield new DataPacket('normal', '', `Normal${i}`);
                 }
             }
 
             const mergedStream = merge(timeoutStream(), normalStream());
-            const results: SimpleStreamPacket[] = [];
+            const results: DataPacket[] = [];
             let error: Error | null = null;
 
             // Start consuming
@@ -1294,7 +1294,7 @@ describe('SimpleStreamPacket', () => {
 
         it('should handle cancellation with partial results and error recovery', async () => {
             const abortController = new AbortController();
-            const partialResults: SimpleStreamPacket[] = [];
+            const partialResults: DataPacket[] = [];
             const errors: Error[] = [];
 
             async function* reliableStream() {
@@ -1304,7 +1304,7 @@ describe('SimpleStreamPacket', () => {
                             throw new Error('Reliable stream cancelled');
                         }
                         await new Promise(resolve => setTimeout(resolve, 20));
-                        yield new SimpleStreamPacket('reliable', '', `Reliable${i}`);
+                        yield new DataPacket('reliable', '', `Reliable${i}`);
                     }
                 } catch (error) {
                     errors.push(error as Error);
@@ -1322,7 +1322,7 @@ describe('SimpleStreamPacket', () => {
                         if (i === 3) {
                             throw new Error('Unreliable stream error');
                         }
-                        yield new SimpleStreamPacket('unreliable', '', `Unreliable${i}`);
+                        yield new DataPacket('unreliable', '', `Unreliable${i}`);
                     }
                 } catch (error) {
                     errors.push(error as Error);
@@ -1371,7 +1371,7 @@ describe('SimpleStreamPacket', () => {
                             throw new Error('Infinite stream cancelled');
                         }
                         await new Promise(resolve => setTimeout(resolve, 10));
-                        yield new SimpleStreamPacket('infinite', '', `Item${count++}`);
+                        yield new DataPacket('infinite', '', `Item${count++}`);
                     }
                 } catch (error) {
                     throw error;
@@ -1384,14 +1384,14 @@ describe('SimpleStreamPacket', () => {
                         throw new Error('Finite stream cancelled');
                     }
                     await new Promise(resolve => setTimeout(resolve, 30));
-                    yield new SimpleStreamPacket('finite', '', `Finite${i}`);
+                    yield new DataPacket('finite', '', `Finite${i}`);
                 }
             }
 
             // Use it-take to limit results and prevent resource exhaustion
             const mergedStream = merge(infiniteStream(), finiteStream());
             const limitedStream = itTake(mergedStream, 8); // Limit to 8 items
-            const results: SimpleStreamPacket[] = [];
+            const results: DataPacket[] = [];
             let error: Error | null = null;
 
             // Start consuming
@@ -1432,7 +1432,7 @@ describe('SimpleStreamPacket', () => {
                             throw new Error('Processing stream 1 cancelled');
                         }
                         await new Promise(resolve => setTimeout(resolve, 40));
-                        yield new SimpleStreamPacket('processing1', '', `P1-${i}`);
+                        yield new DataPacket('processing1', '', `P1-${i}`);
                     }
                 } finally {
                     processingFlags.stream1 = true;
@@ -1446,7 +1446,7 @@ describe('SimpleStreamPacket', () => {
                             throw new Error('Processing stream 2 cancelled');
                         }
                         await new Promise(resolve => setTimeout(resolve, 60));
-                        yield new SimpleStreamPacket('processing2', '', `P2-${i}`);
+                        yield new DataPacket('processing2', '', `P2-${i}`);
                     }
                 } finally {
                     processingFlags.stream2 = true;
@@ -1460,7 +1460,7 @@ describe('SimpleStreamPacket', () => {
                             throw new Error('Cleanup stream cancelled');
                         }
                         await new Promise(resolve => setTimeout(resolve, 80));
-                        yield new SimpleStreamPacket('cleanup', '', `Cleanup${i}`);
+                        yield new DataPacket('cleanup', '', `Cleanup${i}`);
                     }
                 } finally {
                     processingFlags.cleanup = true;
@@ -1468,7 +1468,7 @@ describe('SimpleStreamPacket', () => {
             }
 
             const mergedStream = merge(processingStream1(), processingStream2(), cleanupStream());
-            const results: SimpleStreamPacket[] = [];
+            const results: DataPacket[] = [];
             let error: Error | null = null;
 
             // Start consuming

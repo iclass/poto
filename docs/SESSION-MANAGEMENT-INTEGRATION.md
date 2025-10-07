@@ -18,10 +18,10 @@ const wss = new WebSocketServer({ port: 8080 });
 wss.on('connection', (ws, req) => {
     // Extract user ID from request (JWT, session, etc.)
     const userId = extractUserIdFromRequest(req);
-    const sessionId = generateSessionId();
+    const conversationId = generateSessionId();
     
     // Start user session
-    chatModule.startUserSession(userId, sessionId);
+    chatModule.startUserSession(userId, conversationId);
     
     ws.on('message', async (data) => {
         try {
@@ -154,8 +154,8 @@ app.get('/chat-stream/:userId', (req, res) => {
 ### 1. Session Start
 ```typescript
 // When user connects
-const sessionId = generateSessionId();
-chatModule.startUserSession(userId, sessionId);
+const conversationId = generateSessionId();
+chatModule.startUserSession(userId, conversationId);
 ```
 
 ### 2. Activity Tracking
@@ -192,8 +192,8 @@ console.log(`User ${userId} last active: ${sessionInfo?.lastActivity}`);
 ### Session Events
 ```typescript
 // Listen for session events
-chatModule.on('sessionStarted', (userId, sessionId) => {
-    console.log(`📱 User ${userId} started session ${sessionId}`);
+chatModule.on('sessionStarted', (userId, conversationId) => {
+    console.log(`📱 User ${userId} started session ${conversationId}`);
 });
 
 chatModule.on('sessionEnded', (userId, archiveId) => {
@@ -253,10 +253,10 @@ AUTO_ARCHIVE_ON_DISCONNECT=true
 ```typescript
 // Handle sticky sessions
 app.use((req, res, next) => {
-    const sessionId = req.headers['x-session-id'];
-    if (sessionId) {
+    const conversationId = req.headers['x-session-id'];
+    if (conversationId) {
         // Route to same server instance
-        req.sessionId = sessionId;
+        req.conversationId = conversationId;
     }
     next();
 });

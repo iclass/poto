@@ -1,14 +1,14 @@
-# SimpleStreamPacket - Simplified Implementation
+# DataPacket - Simplified Implementation
 
 ## Overview
 
-A minimal, experimental `SimpleStreamPacket` with just three fields: `source`, `reasoning`, and `content`. Designed for testing with `it-merge` and `it-all` tools.
+A minimal, experimental `DataPacket` with just three fields: `source`, `reasoning`, and `content`. Designed for testing with `it-merge` and `it-all` tools.
 
 ## Implementation
 
 ### Core Class
 ```typescript
-export class SimpleStreamPacket {
+export class DataPacket {
     source: string;      // Data source (e.g., 'llm', 'user', 'system', 'tool')
     reasoning: string;  // Reasoning content
     content: string;     // Main content
@@ -46,17 +46,17 @@ export class SimpleStreamPacket {
 ```typescript
 import merge from 'it-merge';
 import all from 'it-all';
-import { SimpleStreamPacket } from './src/shared/SimpleStreamPacket';
+import { DataPacket } from './src/shared/DataPacket';
 
 // Create streams
 const stream1 = async function* () {
-    yield new SimpleStreamPacket('stream1', '', 'Hello');
-    yield new SimpleStreamPacket('stream1', '', ' from stream1');
+    yield new DataPacket('stream1', '', 'Hello');
+    yield new DataPacket('stream1', '', ' from stream1');
 };
 
 const stream2 = async function* () {
-    yield new SimpleStreamPacket('stream2', '', ' world');
-    yield new SimpleStreamPacket('stream2', '', ' from stream2');
+    yield new DataPacket('stream2', '', ' world');
+    yield new DataPacket('stream2', '', ' from stream2');
 };
 
 // Merge and process
@@ -73,21 +73,21 @@ console.log('Total packets:', allPackets.length);
 async function* userTyping() {
     const message = "Hello, can you help me?";
     for (let i = 0; i < message.length; i++) {
-        yield new SimpleStreamPacket('user', '', message[i]);
+        yield new DataPacket('user', '', message[i]);
     }
 }
 
 // LLM reasoning
 async function* llmReasoning() {
-    yield new SimpleStreamPacket('llm', 'The user is asking for help.', '');
-    yield new SimpleStreamPacket('llm', 'I should be helpful.', '');
+    yield new DataPacket('llm', 'The user is asking for help.', '');
+    yield new DataPacket('llm', 'I should be helpful.', '');
 }
 
 // LLM response
 async function* llmResponse() {
     const response = "I'd be happy to help!";
     for (let i = 0; i < response.length; i++) {
-        yield new SimpleStreamPacket('llm', '', response[i]);
+        yield new DataPacket('llm', '', response[i]);
     }
 }
 
@@ -134,9 +134,9 @@ const llmContent = allPackets
 
 ## Files Created
 
-1. **`src/shared/SimpleStreamPacket.ts`** - Core implementation (29 lines)
-2. **`tests/unit/SimpleStreamPacket.test.ts`** - Test suite (10 tests)
-3. **`src/examples/SimpleStreamPacketExample.ts`** - Usage examples
+1. **`src/shared/DataPacket.ts`** - Core implementation (29 lines)
+2. **`tests/unit/DataPacket.test.ts`** - Test suite (10 tests)
+3. **`src/examples/DataPacketExample.ts`** - Usage examples
 
 ## Dependencies
 

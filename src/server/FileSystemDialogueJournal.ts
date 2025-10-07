@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { YAML } from "bun";
 import { BaseDialogueJournal, ChatMessage, DialogueJournalStats, CleanupOptions, CleanupResult, ArchivedConversation, ConversationSummary } from './DialogueJournal';
 import { PotoUser } from './UserProvider';
 
@@ -58,16 +59,16 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
     /**
      * Get user's conversation history
      */
-    async getConversation(user: PotoUser, sessionId?: string): Promise<ChatMessage[]> {
+    async getConversation(user: PotoUser, conversationId?: string): Promise<ChatMessage[]> {
         this.validateUser(user);
-        const conversationPath = this.getConversationPath(user, sessionId);
+        const conversationPath = this.getConversationPath(user, conversationId);
         
         try {
             const content = await fs.readFile(conversationPath, 'utf-8');
             if (!content.trim()) return [];
             
             // Parse multiple YAML documents using Bun's built-in parser
-            const documents = (Bun as any).YAML.parse(content) as ChatMessage[];
+            const documents = YAML.parse(content) as ChatMessage[];
             return Array.isArray(documents) ? documents : [documents];
         } catch (error: any) {
             if (error.code === 'ENOENT') {
@@ -80,11 +81,11 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
     /**
      * Add a single message to user's conversation
      */
-    async addMessage(user: PotoUser, message: ChatMessage, sessionId?: string): Promise<void> {
+    async addMessage(user: PotoUser, message: ChatMessage, conversationId?: string): Promise<void> {
         this.validateUser(user);
         this.validateMessage(message);
         
-        const conversationPath = this.getConversationPath(user, sessionId);
+        const conversationPath = this.getConversationPath(user, conversationId);
         
         // Ensure directory exists
         await this.ensureDirectoryExists(path.dirname(conversationPath));
@@ -106,17 +107,17 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
         });
 
         // Check if we need to archive
-        await this.checkAndArchiveIfNeeded(user, sessionId);
+        await this.checkAndArchiveIfNeeded(user, conversationId);
     }
 
     /**
      * Add multiple messages to user's conversation (batch operation)
      */
-    async addMessages(user: PotoUser, messages: ChatMessage[], sessionId?: string): Promise<void> {
+    async addMessages(user: PotoUser, messages: ChatMessage[], conversationId?: string): Promise<void> {
         this.validateUser(user);
         messages.forEach(msg => this.validateMessage(msg));
         
-        const conversationPath = this.getConversationPath(user, sessionId);
+        const conversationPath = this.getConversationPath(user, conversationId);
         
         // Ensure directory exists
         await this.ensureDirectoryExists(path.dirname(conversationPath));
@@ -141,15 +142,15 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
         });
 
         // Check if we need to archive
-        await this.checkAndArchiveIfNeeded(user, sessionId);
+        await this.checkAndArchiveIfNeeded(user, conversationId);
     }
 
     /**
      * Clear user's conversation history
      */
-    async clearConversation(user: PotoUser, sessionId?: string): Promise<void> {
+    async clearConversation(user: PotoUser, conversationId?: string): Promise<void> {
         this.validateUser(user);
-        const conversationPath = this.getConversationPath(user, sessionId);
+        const conversationPath = this.getConversationPath(user, conversationId);
         
         try {
             await fs.unlink(conversationPath);
@@ -163,10 +164,10 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
     /**
      * Archive user's current conversation
      */
-    async archiveConversation(user: PotoUser, sessionId?: string, conversationId?: string): Promise<string> {
+    async archiveConversation(user: PotoUser, conversationId?: string): Promise<string> {
         this.validateUser(user);
         
-        const conversation = await this.getConversation(user, sessionId);
+        const conversation = await this.getConversation(user, conversationId);
         if (conversation.length === 0) {
             throw new Error('No conversation to archive');
         }
@@ -178,7 +179,7 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
         await this.ensureDirectoryExists(this.getArchiveDirectory(user));
         
         // Move current conversation to archive
-        const currentPath = this.getConversationPath(user, sessionId);
+        const currentPath = this.getConversationPath(user, conversationId);
         await fs.rename(currentPath, archivePath);
         
         // Create new empty conversation file
@@ -206,7 +207,7 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
                     const content = await fs.readFile(archivePath, 'utf-8');
                     
                     // Parse to get message count and times
-                    const messages = (Bun as any).YAML.parse(content) as ChatMessage[];
+                    const messages = YAML.parse(content) as ChatMessage[];
                     const messageArray = Array.isArray(messages) ? messages : [messages];
                     
                     archives.push({
@@ -276,7 +277,7 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
                 try {
                     const content = await fs.readFile(currentPath, 'utf-8');
                     if (content.trim()) {
-                        const messages = (Bun as any).YAML.parse(content) as ChatMessage[];
+                        const messages = YAML.parse(content) as ChatMessage[];
                         const messageArray = Array.isArray(messages) ? messages : [messages];
                         totalMessages += messageArray.length;
                         storageUsage += content.length;
@@ -383,7 +384,7 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
                         // Check for old messages in current conversation
                         const content = await fs.readFile(currentPath, 'utf-8');
                         if (content.trim()) {
-                            const messages = (Bun as any).YAML.parse(content) as ChatMessage[];
+                            const messages = YAML.parse(content) as ChatMessage[];
                             const messageArray = Array.isArray(messages) ? messages : [messages];
                             
                             const recentMessages = messageArray.filter(msg => {
@@ -394,7 +395,7 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
                             if (recentMessages.length !== messageArray.length) {
                                 if (!dryRun) {
                                     const yamlDocs = recentMessages.map(msg => 
-                                        (Bun as any).YAML.stringify(msg, null, 2) + '---\n'
+                                        YAML.stringify(msg, null, 2) + '---\n'
                                     ).join('');
                                     await fs.writeFile(currentPath, yamlDocs);
                                     memoryFreed += content.length - yamlDocs.length;
@@ -613,13 +614,13 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
     }
 
 
-    private getConversationPath(user: PotoUser, sessionId?: string): string {
+    private getConversationPath(user: PotoUser, conversationId?: string): string {
         const userShardPath = this.getUserShardPath(user.id);
-        if (sessionId) {
-            return path.join(this.rootPath, userShardPath, 'dialogs', `session-${sessionId}.yaml`);
+        if (conversationId) {
+            return path.join(this.rootPath, userShardPath, 'dialogs', `session-${conversationId}.yaml`);
         }
-        // All sessions must have a unique sessionId - no fallback to current.yaml
-        throw new Error('SessionId is required for all dialogue journal operations');
+        // All conversations must have a unique conversationId - no fallback to current.yaml
+        throw new Error('ConversationId is required for all dialogue journal operations');
     }
 
     private getArchiveDirectory(user: PotoUser): string {
@@ -708,11 +709,11 @@ export class FileSystemDialogueJournal extends BaseDialogueJournal {
         return await operation();
     }
 
-    private async checkAndArchiveIfNeeded(user: PotoUser, sessionId?: string): Promise<void> {
-        const conversation = await this.getConversation(user, sessionId);
+    private async checkAndArchiveIfNeeded(user: PotoUser, conversationId?: string): Promise<void> {
+        const conversation = await this.getConversation(user, conversationId);
         
         if (conversation.length >= this.archiveThreshold) {
-            await this.archiveConversation(user, sessionId);
+            await this.archiveConversation(user, conversationId);
         }
     }
 }

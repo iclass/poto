@@ -1,14 +1,14 @@
-# SimpleStreamPacket Experimental Implementation
+# DataPacket Experimental Implementation
 
 ## Overview
 
-This is an experimental implementation of a `SimpleStreamPacket` with three fields: `source`, `reasoning`, and `content`. The implementation is designed to work seamlessly with external async iterator tools like `it-merge` and `it-all`.
+This is an experimental implementation of a `DataPacket` with three fields: `source`, `reasoning`, and `content`. The implementation is designed to work seamlessly with external async iterator tools like `it-merge` and `it-all`.
 
 ## Design
 
 ### Core Structure
 ```typescript
-class SimpleStreamPacket {
+class DataPacket {
     source: string;      // Data source (e.g., 'llm', 'user', 'system', 'tool')
     reasoning: string;   // Reasoning content
     content: string;     // Main content
@@ -25,8 +25,8 @@ class SimpleStreamPacket {
 ## Implementation
 
 ### Files Created
-1. **`src/shared/SimpleStreamPacket.ts`** - Core implementation
-2. **`tests/unit/SimpleStreamPacket.test.ts`** - Comprehensive test suite
+1. **`src/shared/DataPacket.ts`** - Core implementation
+2. **`tests/unit/DataPacket.test.ts`** - Comprehensive test suite
 3. **`src/examples/StreamPacketExample.ts`** - Usage examples
 
 ### Dependencies Added
@@ -53,17 +53,17 @@ class SimpleStreamPacket {
 ```typescript
 import merge from 'it-merge';
 import all from 'it-all';
-import { SimpleStreamPacket } from './src/shared/SimpleStreamPacket';
+import { DataPacket } from './src/shared/DataPacket';
 
 // Create two async generators
 const stream1 = async function* () {
-    yield new SimpleStreamPacket('stream1', '', 'Hello');
-    yield new SimpleStreamPacket('stream1', '', ' from stream1');
+    yield new DataPacket('stream1', '', 'Hello');
+    yield new DataPacket('stream1', '', ' from stream1');
 };
 
 const stream2 = async function* () {
-    yield new SimpleStreamPacket('stream2', '', ' world');
-    yield new SimpleStreamPacket('stream2', '', ' from stream2');
+    yield new DataPacket('stream2', '', ' world');
+    yield new DataPacket('stream2', '', ' from stream2');
 };
 
 // Merge streams
@@ -80,7 +80,7 @@ console.log('Total packets:', allPackets.length);
 async function* userTyping() {
     const message = "Hello, can you help me?";
     for (let i = 0; i < message.length; i++) {
-        yield SimpleStreamPacket.fromSourceAndContent('user', message[i]);
+        yield DataPacket.fromSourceAndContent('user', message[i]);
     }
 }
 
@@ -91,7 +91,7 @@ async function* llmReasoning() {
         "I should be helpful and supportive."
     ];
     for (const step of steps) {
-        yield SimpleStreamPacket.fromSourceAndReasoning('llm', step);
+        yield DataPacket.fromSourceAndReasoning('llm', step);
     }
 }
 
@@ -99,7 +99,7 @@ async function* llmReasoning() {
 async function* llmResponse() {
     const response = "I'd be happy to help!";
     for (let i = 0; i < response.length; i++) {
-        yield SimpleStreamPacket.fromSourceAndContent('llm', response[i]);
+        yield DataPacket.fromSourceAndContent('llm', response[i]);
     }
 }
 
@@ -163,7 +163,7 @@ const llmContent = allPackets
 
 ## Comparison with Original Design
 
-| Aspect | Original StreamPacket | SimpleStreamPacket |
+| Aspect | Original StreamPacket | DataPacket |
 |--------|----------------------|-------------------|
 | Fields | source, reasoning, content | source, reasoning, content |
 | Complexity | High (metadata, timestamps, etc.) | Low (just three fields) |
@@ -202,7 +202,7 @@ enum StreamMode {
 
 ## Conclusion
 
-The `SimpleStreamPacket` experimental implementation successfully demonstrates:
+The `DataPacket` experimental implementation successfully demonstrates:
 
 ✅ **Clean three-field design** that's easy to understand and use  
 ✅ **Perfect compatibility** with `it-merge` and `it-all` tools  

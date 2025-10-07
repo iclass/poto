@@ -1,4 +1,4 @@
-# Client-Side Cancellation Testing with SimpleStreamPacket
+# Client-Side Cancellation Testing with DataPacket
 
 ## Overview
 
@@ -71,7 +71,7 @@ async function* cancellableStream() {
                 throw new Error('Stream cancelled by client');
             }
             await new Promise(resolve => setTimeout(resolve, 50));
-            yield new SimpleStreamPacket('stream', '', `Item${i}`);
+            yield new DataPacket('stream', '', `Item${i}`);
         }
     } catch (error) {
         // Handle cancellation
@@ -216,7 +216,7 @@ async function* streamWithCancellation(request: Request) {
             if (abortController.signal.aborted) {
                 throw new Error('Stream cancelled by client');
             }
-            yield new SimpleStreamPacket('server', '', `Item${i}`);
+            yield new DataPacket('server', '', `Item${i}`);
         }
     } catch (error) {
         // Handle cancellation
@@ -234,7 +234,7 @@ async function* streamWithCancellation(request: Request) {
 
 ## Conclusion
 
-The comprehensive cancellation test suite demonstrates that `SimpleStreamPacket` works effectively with client-side cancellation scenarios:
+The comprehensive cancellation test suite demonstrates that `DataPacket` works effectively with client-side cancellation scenarios:
 
 ✅ **Proper cancellation propagation** through merged streams  
 ✅ **Resource management and cleanup** on cancellation  

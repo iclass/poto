@@ -4,7 +4,7 @@ import { TokenUsage } from '../server/CompletionResponse';
  * Tracks token usage for a single LLM session
  */
 export class LLMSessionTracker {
-    private sessionId: string;
+    private conversationId: string;
     private startTime: Date;
     private endTime?: Date;
     private totalUsage: TokenUsage;
@@ -17,8 +17,8 @@ export class LLMSessionTracker {
         actualTokens: number;
     }>;
 
-    constructor(sessionId: string) {
-        this.sessionId = sessionId;
+    constructor(conversationId: string) {
+        this.conversationId = conversationId;
         this.startTime = new Date();
         this.totalUsage = new TokenUsage();
         this.requestCount = 0;
@@ -100,7 +100,7 @@ export class LLMSessionTracker {
      * Get session summary
      */
     getSummary(): {
-        sessionId: string;
+        conversationId: string;
         duration: string;
         requestCount: number;
         totalTokens: number;
@@ -113,7 +113,7 @@ export class LLMSessionTracker {
         endTime?: Date;
     } {
         return {
-            sessionId: this.sessionId,
+            conversationId: this.conversationId,
             duration: this.getDurationFormatted(),
             requestCount: this.requestCount,
             totalTokens: this.totalUsage.total_tokens,
@@ -168,10 +168,10 @@ export class LLMBatchTracker {
     /**
      * Start a new session
      */
-    startSession(sessionId: string): LLMSessionTracker {
-        const session = new LLMSessionTracker(sessionId);
-        this.sessions.set(sessionId, session);
-        this.currentSessionId = sessionId;
+    startSession(conversationId: string): LLMSessionTracker {
+        const session = new LLMSessionTracker(conversationId);
+        this.sessions.set(conversationId, session);
+        this.currentSessionId = conversationId;
         return session;
     }
 
@@ -296,7 +296,7 @@ export class LLMBatchTracker {
 
         summary.sessions.forEach((session, index) => {
             report += `
-### Session ${index + 1}: ${session.sessionId}
+### Session ${index + 1}: ${session.conversationId}
 - **Duration**: ${session.duration}
 - **Requests**: ${session.requestCount}
 - **Total Tokens**: ${session.totalTokens.toLocaleString()}

@@ -203,7 +203,7 @@ try {
 - Need continuous processing
 - Handling async iterators
 - Building reactive systems
-- Working with `SimpleStreamPacket` streams
+- Working with `DataPacket` streams
 
 ## Installation
 

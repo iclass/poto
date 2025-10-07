@@ -1,8 +1,8 @@
-# Real-World Streaming Testing with SimpleStreamPacket
+# Real-World Streaming Testing with DataPacket
 
 ## Overview
 
-Comprehensive test suite for `SimpleStreamPacket` that addresses real-world scenarios including timeouts, exceptions, and the natural flow of reasoning-then-content patterns in LLM interactions.
+Comprehensive test suite for `DataPacket` that addresses real-world scenarios including timeouts, exceptions, and the natural flow of reasoning-then-content patterns in LLM interactions.
 
 ## Key Insights from Real-World Testing
 
@@ -108,7 +108,7 @@ try {
 async function* reasoningPhase() {
     for (const step of reasoningSteps) {
         await new Promise(resolve => setTimeout(resolve, 100));
-        yield new SimpleStreamPacket('llm', step, '');
+        yield new DataPacket('llm', step, '');
     }
 }
 
@@ -116,7 +116,7 @@ async function* reasoningPhase() {
 async function* contentPhase() {
     await new Promise(resolve => setTimeout(resolve, 500)); // Wait for reasoning
     for (let i = 0; i < response.length; i++) {
-        yield new SimpleStreamPacket('llm', '', response[i]);
+        yield new DataPacket('llm', '', response[i]);
     }
 }
 ```
@@ -152,7 +152,7 @@ async function* contentPhase() {
 
 ## Conclusion
 
-The comprehensive test suite demonstrates that `SimpleStreamPacket` works effectively in real-world scenarios with:
+The comprehensive test suite demonstrates that `DataPacket` works effectively in real-world scenarios with:
 
 ✅ **Natural reasoning-then-content flow**  
 ✅ **Robust error handling and recovery**  

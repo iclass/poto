@@ -124,5 +124,5 @@ export function generatorToSseStream<T>(
 	);
 }
 
-// Re-export SimpleStreamPacket for convenience
-export { SimpleStreamPacket } from './SimpleStreamPacket';
+// Re-export DataPacket for convenience
+export { DataPacket } from './DataPacket';

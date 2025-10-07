@@ -1,11 +1,11 @@
-import { SimpleStreamPacket } from '../shared/SimpleStreamPacket';
+import { DataPacket } from '../shared/DataPacket';
 import merge from 'it-merge';
 import all from 'it-all';
 
 /**
- * Simple examples demonstrating SimpleStreamPacket with it-merge and it-all
+ * Simple examples demonstrating DataPacket with it-merge and it-all
  */
-export class SimpleStreamPacketExample {
+export class DataPacketExample {
     
     /**
      * Basic example: merge two simple streams
@@ -15,15 +15,15 @@ export class SimpleStreamPacketExample {
         
         // Create two async generators
         const values1 = async function* () {
-            yield new SimpleStreamPacket('stream1', '', 'Hello');
-            yield new SimpleStreamPacket('stream1', '', ' from');
-            yield new SimpleStreamPacket('stream1', '', ' stream1');
+            yield new DataPacket('stream1', '', 'Hello');
+            yield new DataPacket('stream1', '', ' from');
+            yield new DataPacket('stream1', '', ' stream1');
         };
         
         const values2 = async function* () {
-            yield new SimpleStreamPacket('stream2', '', ' world');
-            yield new SimpleStreamPacket('stream2', '', ' from');
-            yield new SimpleStreamPacket('stream2', '', ' stream2');
+            yield new DataPacket('stream2', '', ' world');
+            yield new DataPacket('stream2', '', ' from');
+            yield new DataPacket('stream2', '', ' stream2');
         };
         
         // Merge the streams
@@ -59,7 +59,7 @@ export class SimpleStreamPacketExample {
         async function* userTyping() {
             const message = "Hello, can you help me?";
             for (let i = 0; i < message.length; i++) {
-                yield new SimpleStreamPacket('user', '', message[i]);
+                yield new DataPacket('user', '', message[i]);
             }
         }
         
@@ -71,7 +71,7 @@ export class SimpleStreamPacketExample {
             ];
             
             for (const step of reasoningSteps) {
-                yield new SimpleStreamPacket('llm', step, '');
+                yield new DataPacket('llm', step, '');
             }
         }
         
@@ -79,7 +79,7 @@ export class SimpleStreamPacketExample {
         async function* llmResponse() {
             const response = "I'd be happy to help!";
             for (let i = 0; i < response.length; i++) {
-                yield new SimpleStreamPacket('llm', '', response[i]);
+                yield new DataPacket('llm', '', response[i]);
             }
         }
         
@@ -116,18 +116,18 @@ export class SimpleStreamPacketExample {
         
         // Different data sources
         async function* databaseStream() {
-            yield new SimpleStreamPacket('database', '', 'User data loaded');
-            yield new SimpleStreamPacket('database', '', ' - ID: 123');
+            yield new DataPacket('database', '', 'User data loaded');
+            yield new DataPacket('database', '', ' - ID: 123');
         }
         
         async function* apiStream() {
-            yield new SimpleStreamPacket('api', '', 'External API called');
-            yield new SimpleStreamPacket('api', '', ' - Status: 200');
+            yield new DataPacket('api', '', 'External API called');
+            yield new DataPacket('api', '', ' - Status: 200');
         }
         
         async function* processingStream() {
-            yield new SimpleStreamPacket('processor', 'Processing user request...', '');
-            yield new SimpleStreamPacket('processor', 'Validating data...', '');
+            yield new DataPacket('processor', 'Processing user request...', '');
+            yield new DataPacket('processor', 'Validating data...', '');
         }
         
         // Merge all data sources
@@ -169,30 +169,30 @@ export class SimpleStreamPacketExample {
             const delays = [10, 50, 20, 30, 15, 40, 25, 35];
             for (let i = 0; i < delays.length; i++) {
                 await new Promise(resolve => setTimeout(resolve, delays[i]));
-                yield new SimpleStreamPacket('random', '', `Random${i + 1}`);
+                yield new DataPacket('random', '', `Random${i + 1}`);
             }
         }
         
         // Stream with burst pattern
         async function* burstStream() {
             // Initial burst
-            yield new SimpleStreamPacket('burst', '', 'Burst1');
-            yield new SimpleStreamPacket('burst', '', 'Burst2');
-            yield new SimpleStreamPacket('burst', '', 'Burst3');
+            yield new DataPacket('burst', '', 'Burst1');
+            yield new DataPacket('burst', '', 'Burst2');
+            yield new DataPacket('burst', '', 'Burst3');
             
             // Long delay
             await new Promise(resolve => setTimeout(resolve, 100));
             
             // Final burst
-            yield new SimpleStreamPacket('burst', '', 'Burst4');
-            yield new SimpleStreamPacket('burst', '', 'Burst5');
+            yield new DataPacket('burst', '', 'Burst4');
+            yield new DataPacket('burst', '', 'Burst5');
         }
         
         // Stream with steady pattern
         async function* steadyStream() {
             for (let i = 1; i <= 5; i++) {
                 await new Promise(resolve => setTimeout(resolve, 25));
-                yield new SimpleStreamPacket('steady', '', `Steady${i}`);
+                yield new DataPacket('steady', '', `Steady${i}`);
             }
         }
         
@@ -245,7 +245,7 @@ export class SimpleStreamPacketExample {
                 // Simulate realistic typing speed (50-150ms per character)
                 const delay = Math.random() * 100 + 50;
                 await new Promise(resolve => setTimeout(resolve, delay));
-                yield new SimpleStreamPacket('user', '', message[i]);
+                yield new DataPacket('user', '', message[i]);
             }
         }
         
@@ -262,7 +262,7 @@ export class SimpleStreamPacketExample {
                 // Random processing time (100-300ms per step)
                 const delay = Math.random() * 200 + 100;
                 await new Promise(resolve => setTimeout(resolve, delay));
-                yield new SimpleStreamPacket('llm', step, '');
+                yield new DataPacket('llm', step, '');
             }
         }
         
@@ -273,7 +273,7 @@ export class SimpleStreamPacketExample {
                 // Simulate realistic response streaming (20-80ms per character)
                 const delay = Math.random() * 60 + 20;
                 await new Promise(resolve => setTimeout(resolve, delay));
-                yield new SimpleStreamPacket('llm', '', response[i]);
+                yield new DataPacket('llm', '', response[i]);
             }
         }
         
@@ -328,4 +328,4 @@ export class SimpleStreamPacketExample {
 }
 
 // Export for use in tests or other modules
-export default SimpleStreamPacketExample;
+export default DataPacketExample;

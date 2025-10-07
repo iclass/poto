@@ -1,9 +1,9 @@
-import { SimpleStreamPacket } from '../shared/SimpleStreamPacket';
+import { DataPacket } from '../shared/DataPacket';
 import merge from 'it-merge';
 import all from 'it-all';
 
 /**
- * Example demonstrating SimpleStreamPacket with it-merge and it-all
+ * Example demonstrating DataPacket with it-merge and it-all
  * Shows how to merge multiple async streams of StreamPackets
  */
 export class StreamPacketExample {
@@ -16,15 +16,15 @@ export class StreamPacketExample {
         
         // Create two async generators
         const values1 = async function* () {
-            yield new SimpleStreamPacket('stream1', '', 'Hello');
-            yield new SimpleStreamPacket('stream1', '', ' from');
-            yield new SimpleStreamPacket('stream1', '', ' stream1');
+            yield new DataPacket('stream1', '', 'Hello');
+            yield new DataPacket('stream1', '', ' from');
+            yield new DataPacket('stream1', '', ' stream1');
         };
         
         const values2 = async function* () {
-            yield new SimpleStreamPacket('stream2', '', ' world');
-            yield new SimpleStreamPacket('stream2', '', ' from');
-            yield new SimpleStreamPacket('stream2', '', ' stream2');
+            yield new DataPacket('stream2', '', ' world');
+            yield new DataPacket('stream2', '', ' from');
+            yield new DataPacket('stream2', '', ' stream2');
         };
         
         // Merge the streams
@@ -60,7 +60,7 @@ export class StreamPacketExample {
         async function* userTyping() {
             const message = "Hello, can you help me with a math problem?";
             for (let i = 0; i < message.length; i++) {
-                yield new SimpleStreamPacket('user', '', message[i]);
+                yield new DataPacket('user', '', message[i]);
                 await new Promise(resolve => setTimeout(resolve, 50)); // Simulate typing delay
             }
         }
@@ -74,7 +74,7 @@ export class StreamPacketExample {
             ];
             
             for (const step of reasoningSteps) {
-                yield new SimpleStreamPacket('llm', step, '');
+                yield new DataPacket('llm', step, '');
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
@@ -83,7 +83,7 @@ export class StreamPacketExample {
         async function* llmResponse() {
             const response = "I'd be happy to help you with a math problem! Could you please tell me what specific problem you're working on?";
             for (let i = 0; i < response.length; i++) {
-                yield new SimpleStreamPacket('llm', '', response[i]);
+                yield new DataPacket('llm', '', response[i]);
                 await new Promise(resolve => setTimeout(resolve, 30));
             }
         }
@@ -121,24 +121,24 @@ export class StreamPacketExample {
         
         // Different data sources
         async function* databaseStream() {
-            yield new SimpleStreamPacket('database', '', 'User data loaded');
-            yield new SimpleStreamPacket('database', '', ' - ID: 123');
+            yield new DataPacket('database', '', 'User data loaded');
+            yield new DataPacket('database', '', ' - ID: 123');
         }
         
         async function* apiStream() {
-            yield new SimpleStreamPacket('api', '', 'External API called');
-            yield new SimpleStreamPacket('api', '', ' - Status: 200');
+            yield new DataPacket('api', '', 'External API called');
+            yield new DataPacket('api', '', ' - Status: 200');
         }
         
         async function* cacheStream() {
-            yield new SimpleStreamPacket('cache', '', 'Cache hit');
-            yield new SimpleStreamPacket('cache', '', ' - Key: user_123');
+            yield new DataPacket('cache', '', 'Cache hit');
+            yield new DataPacket('cache', '', ' - Key: user_123');
         }
         
         async function* processingStream() {
-            yield new SimpleStreamPacket('processor', 'Processing user request...', '');
-            yield new SimpleStreamPacket('processor', 'Validating data...', '');
-            yield new SimpleStreamPacket('processor', 'Generating response...', '');
+            yield new DataPacket('processor', 'Processing user request...', '');
+            yield new DataPacket('processor', 'Validating data...', '');
+            yield new DataPacket('processor', 'Generating response...', '');
         }
         
         // Merge all data sources
@@ -181,7 +181,7 @@ export class StreamPacketExample {
         // Create multiple large streams
         async function* createLargeStream(source: string, count: number) {
             for (let i = 0; i < count; i++) {
-                yield new SimpleStreamPacket(
+                yield new DataPacket(
                     source,
                     `Reasoning ${i}`,
                     `Content ${i}`
@@ -222,12 +222,12 @@ export class StreamPacketExample {
         console.log('\n=== Error Handling Example ===');
         
         async function* normalStream() {
-            yield new SimpleStreamPacket('normal', '', 'This is normal');
-            yield new SimpleStreamPacket('normal', '', 'This is also normal');
+            yield new DataPacket('normal', '', 'This is normal');
+            yield new DataPacket('normal', '', 'This is also normal');
         }
         
         async function* errorStream() {
-            yield new SimpleStreamPacket('error', '', 'This will cause an error');
+            yield new DataPacket('example', '', '', 'This will cause an error');
             throw new Error('Simulated stream error');
         }
         

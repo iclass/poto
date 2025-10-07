@@ -18,7 +18,7 @@ async *postChatWithReasoning(
         reasoningEnabled?: boolean;
         systemPrompt?: string;
     } = {}
-): AsyncGenerator<SimpleStreamPacket> {
+): AsyncGenerator<DataPacket> {
     // Use the internal chatWithReasoning method
     for await (const packet of this.chatWithReasoning(message, options)) {
         yield packet;
@@ -43,7 +43,7 @@ const responseGenerator = await this.chatServerModuleProxy.postChatWithReasoning
 1. **Client**: User types `reasoning on`
 2. **Client**: Calls `postChatWithReasoning` method on server
 3. **Server**: Uses `chatWithReasoning` from LLMPotoModule
-4. **Server**: Returns `SimpleStreamPacket` objects with reasoning and content
+4. **Server**: Returns `DataPacket` objects with reasoning and content
 5. **Client**: Displays reasoning in gray, content in AI color
 6. **Result**: Real-time display of AI thinking process
 

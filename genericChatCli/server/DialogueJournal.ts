@@ -98,6 +98,32 @@ export class DialogueJournal {
     }
 
     /**
+     * Simplified method to add assistant message
+     */
+    addMessageForAssistant(user: PotoUser, content: string): void {
+        const message: ChatMessage = {
+            role: 'assistant',
+            content,
+            timestamp: new Date().toISOString()
+        };
+        
+        this.addMessage(user, message);
+    }
+
+    /**
+     * Simplified method to add user message
+     */
+    addMessageForUser(user: PotoUser, content: string): void {
+        const message: ChatMessage = {
+            role: 'user',
+            content,
+            timestamp: new Date().toISOString()
+        };
+        
+        this.addMessage(user, message);
+    }
+
+    /**
      * Get conversation length for a user
      */
     getConversationLength(user: PotoUser): number {

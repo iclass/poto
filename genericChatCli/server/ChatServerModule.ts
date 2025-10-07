@@ -1,7 +1,7 @@
 import { PotoUser } from "../../src/server/UserProvider";
 import { LLMPotoModule, LLMPotoModuleOptions } from "../../src/llms/LLMPotoModule";
 import { LLM } from "../../src/llms/llm";
-import { SimpleStreamPacket } from "../../src/shared/SimpleStreamPacket";
+import { DataPacket } from "../../src/shared/DataPacket";
 
 export interface ChatMessage {
     role: 'user' | 'assistant';
@@ -44,42 +44,4 @@ export class ChatServerModule extends LLMPotoModule  {
         return LLM.getDebugMode();
     }
 
-    /**
-     * Start a new session with optional system prompt
-     * This is a wrapper around createNewTopic for client compatibility
-     */
-	async startSession(systemPrompt?: string): Promise<boolean> {
-		try {
-			const sessionId = await this.createNewTopic(systemPrompt);
-			return !!sessionId;
-		} catch (error) {
-			console.error('Error starting new session:', error);
-			return false;
-		}
-	}
-
-	/**
-	 * Generate topic title for current session
-	 */
-	async generateTopicTitle(): Promise<{ title: string; timestamp: string } | null> {
-		try {
-			return await super.generateTopicTitle();
-		} catch (error) {
-			console.error('Error generating topic title:', error);
-			return null;
-		}
-	}
-
-	/**
-	 * Get topic title for current session
-	 */
-	async getTopicTitle(): Promise<{ title: string; timestamp: string } | null> {
-		try {
-			const sessionData = await this.getUserSession();
-			return await this.getTopicTitle(sessionData.sessionId);
-		} catch (error) {
-			console.error('Error getting topic title:', error);
-			return null;
-		}
-	}
 }

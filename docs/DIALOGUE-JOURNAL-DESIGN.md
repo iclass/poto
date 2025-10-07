@@ -606,7 +606,7 @@ interface ChatMessage {
         model?: string;
         tokens?: number;
         processingTime?: number;
-        sessionId?: string;
+        conversationId?: string;
     };
 }
 ```

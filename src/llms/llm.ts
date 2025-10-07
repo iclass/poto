@@ -2,7 +2,7 @@ import { CompletionResponse, RawLLMResponse, RawResponsesResponse, TokenUsage, c
 import { JSONSchema } from "../shared/JSONSchema";
 import {getAppEnv} from '../AppEnv'
 import { DialogEntry, DialogRole, OpenAIContentBlock, DialogRoles } from "../shared/CommonTypes";
-import { SimpleStreamPacket } from "../shared/SimpleStreamPacket";
+import { DataPacket } from "../shared/DataPacket";
 import { LLMConfig } from "./LLMConfig";
 
 /**
@@ -147,13 +147,13 @@ export class StreamingChunk {
     }
 
     /**
-     * Create a SimpleStreamPacket from this StreamingChunk
+     * Create a DataPacket from this StreamingChunk
      * This provides a unified way to handle both content and reasoning channels
      */
-    toStreamPacket(): SimpleStreamPacket {
+    toStreamPacket(): DataPacket {
         const delta = this.choices?.[0]?.delta;
         if (!delta) {
-            return new SimpleStreamPacket('llm', '', '');
+            return new DataPacket('llm', '', '');
         }
 
         // Extract reasoning content
@@ -164,7 +164,7 @@ export class StreamingChunk {
 
         // Clean output - no debug logging
 
-        return new SimpleStreamPacket('llm', reasoning, content);
+        return new DataPacket('llm', reasoning, content);
     }
 }
 
