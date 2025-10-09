@@ -14,6 +14,21 @@ get_current_version() {
     fi
 }
 
+# Function to update README.md with new version
+update_readme_version() {
+    local new_version=$1
+    if [ -f "README.md" ]; then
+        # Use awk to replace version patterns in README.md
+        # Replace {LATEST_VERSION} with the new version
+        # Replace v[0-9].[0-9].[0-9] pattern with v + new version
+        awk -v version="$new_version" '{
+            gsub(/\{LATEST_VERSION\}/, version)
+            gsub(/v[0-9]+\.[0-9]+\.[0-9]+/, "v" version)
+        }1' README.md > README.md.tmp && mv README.md.tmp README.md
+        echo "📝 Updated version patterns in README.md to v$new_version"
+    fi
+}
+
 # Function to update package.json version
 update_package_version() {
     local new_version=$1
@@ -26,6 +41,9 @@ update_package_version() {
         pkg.version = '$new_version';
         fs.writeFileSync('package.json', JSON.stringify(pkg, null, '\t') + '\n');
     "
+    
+    # Update README.md with the new version
+    update_readme_version $new_version
     
     echo "✅ package.json updated to $new_version"
 }
@@ -60,10 +78,29 @@ case $VERSION_ARG in
         CURRENT=$(get_current_version)
         echo "🔄 Incrementing $VERSION_ARG version from $CURRENT"
         
-        # Use npm version to increment (but don't create git tag)
-        NEW_VERSION=$(npm version $VERSION_ARG --no-git-tag-version)
-        # Remove 'v' prefix that npm adds
-        NEW_VERSION=${NEW_VERSION#v}
+        # Calculate new version using node
+        NEW_VERSION=$(node -e "
+            const current = '$CURRENT';
+            const [major, minor, patch] = current.split('.').map(Number);
+            let newVersion;
+            switch('$VERSION_ARG') {
+                case 'patch': newVersion = \`\${major}.\${minor}.\${patch + 1}\`; break;
+                case 'minor': newVersion = \`\${major}.\${minor + 1}.0\`; break;
+                case 'major': newVersion = \`\${major + 1}.0.0\`; break;
+            }
+            console.log(newVersion);
+        ")
+        
+        # Update package.json using node
+        node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = '$NEW_VERSION';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, '\t') + '\n');
+        "
+        
+        # Update README.md with the new version
+        update_readme_version $NEW_VERSION
         
         echo "✅ Version updated: $CURRENT → $NEW_VERSION"
         echo ""

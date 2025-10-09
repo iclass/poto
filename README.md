@@ -19,11 +19,10 @@
 ### 快速开始
 
 ```bash
-# 一键安装最新版本
-bun add poto@https://github.com/iclass/poto/releases/download/latest/poto.tar.gz
 
 # 安装特定版本
-bun add poto@https://github.com/iclass/poto/releases/download/v2025.10.01-ef61dbc/poto.tar.gz
+bun add https://github.com/iclass/poto/releases/download/v1.0.1/poto.tar.gz     
+
 ```
 
 ### 方式一：作为远程依赖使用（推荐）
@@ -80,12 +79,12 @@ bun add poto@https://github.com/iclass/poto/releases/download/v2025.10.01-ef61db
 
 ```bash
 # 添加特定版本
-bun add poto@https://github.com/iclass/poto/releases/download/v2025.10.01-ef61dbc/poto.tar.gz
+bun add poto@https://github.com/iclass/poto/releases/download/v1.0.2-ef61dbc/poto.tar.gz
 
 # 或使用 package.json
 {
   "dependencies": {
-    "poto": "https://github.com/iclass/poto/releases/download/v2025.10.01-ef61dbc/poto.tar.gz"
+    "poto": "https://github.com/iclass/poto/releases/download/v1.0.2-ef61dbc/poto.tar.gz"
   }
 }
 ```
