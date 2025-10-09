@@ -49,6 +49,7 @@
 		"release:check": "git status --porcelain | wc -l | xargs -I {} sh -c 'if [ {} -ne 0 ]; then echo \"❌ Working directory not clean. Please commit changes first.\"; exit 1; else echo \"✅ Working directory clean, ready for release\"; fi'"
 	},
 	"dependencies": {
+		"chalk": "^5.6.2",
 		"dotenv": "^17.2.0",
 		"it-all": "^3.0.9",
 		"it-first": "^3.0.9",
@@ -59,6 +60,8 @@
 		"jsonrepair": "^3.13.0",
 		"jsonwebtoken": "^9.0.2",
 		"markdown-it": "^14.1.0",
+		"marked": "^16.4.0",
+		"marked-terminal": "^7.3.0",
 		"mime": "^4.0.7",
 		"reflect-metadata": "^0.2.2"
 	},

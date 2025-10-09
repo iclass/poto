@@ -191,6 +191,7 @@ data/
 localonly/
 
 bun.lockb
+bun.lock
 
 # Security - prevent sensitive files from being committed
 localonly/

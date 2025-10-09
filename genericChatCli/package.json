@@ -10,7 +10,10 @@
     "dev": "concurrently \"bun server\" \"bun client\""
   },
   "dependencies": {
-    "bun": "latest"
+    "bun": "latest",
+    "chalk": "^5.6.2",
+    "marked": "^16.4.0",
+    "marked-terminal": "^7.3.0"
   },
   "devDependencies": {
     "concurrently": "^9.2.0"

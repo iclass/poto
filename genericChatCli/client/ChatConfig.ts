@@ -27,7 +27,7 @@ export const defaultConfig: ChatConfig = {
         system: 'gray'
     },
     enableColors: true,
-    enableMarkdown: true,
+    enableMarkdown: false,
     maxHistoryLength: 20 // Reduced to prevent prompt overflow
 };
 

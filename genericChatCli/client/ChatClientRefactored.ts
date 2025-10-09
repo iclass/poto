@@ -87,25 +87,21 @@ export class ChatClient {
         // Load command history from localStorage
         this.loadCommandHistory();
         
-        // Set up readline interface with our custom history
+        // Set up readline interface for user input with enhanced interrupt handling
         this.rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout,
             prompt: '> ',
             // Disable automatic handling of SIGINT
             terminal: true,
-            history: this.commandHistory // Use our command history directly
+            history: this.commandHistory
         });
-        
-        // Set the history index to the end (most recent)
-        (this.rl as any).historyIndex = (this.rl as any).history.length;
         
         // Set up initial SIGINT handler
         this.setupReadlineSigintHandler();
         
         // Set up other handlers
         this.setupLineHandlers();
-        
         
         // Set up process exit handlers for proper cleanup
         this.setupProcessExitHandlers();
@@ -138,18 +134,9 @@ export class ChatClient {
         };
 
         const commandHandlerCallbacks: ChatCommandHandlerCallbacks = {
-            setJsonOutputMode: (enabled: boolean) => { 
-                this.jsonOutputMode = enabled; 
-                this.responseProcessor.updateDependencies({ jsonOutputMode: enabled });
-            },
-            setReasoningEnabled: (enabled: boolean) => { 
-                this.reasoningEnabled = enabled; 
-                this.responseProcessor.updateDependencies({ reasoningEnabled: enabled });
-            },
-            setStreamingEnabled: (enabled: boolean) => { 
-                this.streamingEnabled = enabled; 
-                this.responseProcessor.updateDependencies({ streamingEnabled: enabled });
-            },
+            setJsonOutputMode: (enabled: boolean) => { this.jsonOutputMode = enabled; },
+            setReasoningEnabled: (enabled: boolean) => { this.reasoningEnabled = enabled; },
+            setStreamingEnabled: (enabled: boolean) => { this.streamingEnabled = enabled; },
             setMessageBodyEnabled: (enabled: boolean) => { this.messageBodyEnabled = enabled; },
             setVerboseMode: (enabled: boolean) => { this.verboseMode = enabled; },
             setAutoCancel: (enabled: boolean) => { this.client.setAutoCancelPreviousRequests(enabled); },
@@ -179,12 +166,7 @@ export class ChatClient {
             listAvailableModels: (showPrompt?: boolean) => this.listAvailableModels(showPrompt),
             showCurrentModel: () => this.showCurrentModel(),
             fetchImage: (imageUrl: string) => this.fetchImage(imageUrl),
-            promptInput: (prompt: string, hidden?: boolean) => this.promptInput(prompt, hidden),
-            updateAuthenticationState: (authenticated: boolean, connected: boolean, user?: string) => {
-                this.isAuthenticated = authenticated;
-                this.isConnected = connected;
-                this.currentUser = user;
-            }
+            promptInput: (prompt: string, hidden?: boolean) => this.promptInput(prompt, hidden)
         };
 
         this.commandHandler = new ChatCommandHandler(commandHandlerDeps, commandHandlerCallbacks);
@@ -204,15 +186,7 @@ export class ChatClient {
             updatePrompt: () => { this.updatePrompt(); },
             updateCurrentModel: () => this.updateCurrentModel(),
             promptInput: (prompt: string, hidden?: boolean) => this.promptInput(prompt, hidden),
-            setCurrentTopicTitle: (title?: string) => { this.currentTopicTitle = title; },
-            loginWithCredentials: (userId: string, password: string) => this.loginWithCredentials(userId, password),
-            setAuthenticationState: (authenticated: boolean, connected: boolean, user?: string) => {
-                this.isAuthenticated = authenticated;
-                this.isConnected = connected;
-                this.currentUser = user;
-                // Update command handler authentication state
-                this.commandHandler.updateAuthenticationState(authenticated, connected, user);
-            }
+            setCurrentTopicTitle: (title?: string) => { this.currentTopicTitle = title; }
         };
 
         this.sessionManager = new ChatSessionManager(sessionManagerDeps, sessionManagerCallbacks);
@@ -258,8 +232,6 @@ export class ChatClient {
                     console.log(`✅ Logged in as: ${this.currentUser}`);
                     this.isAuthenticated = true;
                     this.isConnected = true;
-                    // Update command handler authentication state
-                    this.commandHandler.updateAuthenticationState(true, true, this.currentUser);
                     
                     // Prompt for system prompt since login creates a new session
                     console.log('');
@@ -374,7 +346,6 @@ export class ChatClient {
             }
         });
     }
-
 
     /**
      * Requests an interrupt of the current streaming response
@@ -551,13 +522,8 @@ export class ChatClient {
      */
     private async promptInput(prompt: string, hidden: boolean = false): Promise<string> {
         return new Promise((resolve) => {
-            // Store current history to restore it after the question
-            const currentHistory = [...(this.rl as any).history];
-            
             // Use readline's question method with the prompt
             this.rl.question(prompt, (answer) => {
-                // Restore the history after the question
-                (this.rl as any).history = currentHistory;
                 resolve(answer);
             });
         });
@@ -799,8 +765,19 @@ export class ChatClient {
             }
         } catch (error) {
             console.log(ColorUtils.error('❌ Authentication required to start chat.'));
-            console.log(ColorUtils.info('💡 Use the "/login" command to authenticate.'));
+            console.log(ColorUtils.info('💡 Prompting for login credentials...'));
             console.log('');
+            
+            // Always prompt for login when authentication fails (whether no credentials or failed credentials)
+            console.log(ColorUtils.success('🔐 Please login to continue:'));
+            console.log('');
+            await this.sessionManager.handleLogin();
+            
+            // Update prompt after successful login
+            if (this.isConnected && this.isAuthenticated) {
+                await this.updateCurrentModel();
+                this.updatePrompt();
+            }
         }
 
         console.log(ColorUtils.success('💬 Generic Chat CLI Started!'));
