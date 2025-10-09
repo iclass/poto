@@ -75,20 +75,6 @@ bun add https://github.com/iclass/poto/releases/download/v1.0.1/poto.tar.gz
    bun run src/server.ts
    ```
 
-### 使用特定版本
-
-```bash
-# 添加特定版本
-bun add poto@https://github.com/iclass/poto/releases/download/v1.0.1-ef61dbc/poto.tar.gz
-
-# 或使用 package.json
-{
-  "dependencies": {
-    "poto": "https://github.com/iclass/poto/releases/download/v1.0.1-ef61dbc/poto.tar.gz"
-  }
-}
-```
-
 ### 可用的导入选项
 
 Poto 框架支持多种导入方式：
