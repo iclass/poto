@@ -115,9 +115,10 @@ describe("ChatClient Markdown Integration", () => {
                 }
             }
 
-            // Process any remaining content
+            // Process any remaining content - force final processing
             if (contentBuffer) {
-                const finalResult = splitter.split(contentBuffer);
+                // Add a newline to trigger final processing
+                const finalResult = splitter.split(contentBuffer + "\n");
                 displayedContent += finalResult.closed;
             }
 
