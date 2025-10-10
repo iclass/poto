@@ -5,7 +5,7 @@ import {
     UserProvider
 } from "../../src/index";
 
-import { getAppEnv } from "../../src/AppEnv"
+import { getAppEnv } from "../../src/server/AppEnv"
 import { ChatServerModule } from "./ChatServerModule";
 import { $ } from "bun"
 import { port } from "../client/ChatClient";

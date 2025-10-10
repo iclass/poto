@@ -26,3 +26,8 @@ export type ServerInfo = {
   timestamp: string;
   features: string[];
 }
+
+export type ImageSize = {
+  width: number;
+  height: number;
+}

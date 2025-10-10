@@ -1,6 +1,6 @@
 import type { ChatServerModule } from "../server/ChatServerModule";
 import { PotoClient } from "../../src/index";
-import { getAppEnv } from "../../src/AppEnv";
+import { getAppEnv } from "../../src/server/AppEnv";
 import { ModelInfo} from "../shared/types";
 import * as readline from 'readline';
 import { ColorUtils } from "./ColorUtils";
