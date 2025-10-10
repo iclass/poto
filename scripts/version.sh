@@ -29,6 +29,37 @@ update_readme_version() {
     fi
 }
 
+# Function to update demo app package.json with new version
+update_demo_app_version() {
+    local new_version=$1
+    local demo_package_path="demoapp/package.json"
+    
+    if [ -f "$demo_package_path" ]; then
+        echo "📱 Updating demo app package.json to version: $new_version"
+        
+        # Update demo app package.json using node
+        node -e "
+            const fs = require('fs');
+            const path = '$demo_package_path';
+            const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+            
+            // Update version field
+            pkg.version = '$new_version';
+            
+            // Update dependency URL to point to new version
+            if (pkg.dependencies && pkg.dependencies.poto) {
+                pkg.dependencies.poto = 'https://github.com/iclass/poto/releases/download/v$new_version/poto.tar.gz';
+            }
+            
+            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+        "
+        
+        echo "✅ Demo app package.json updated to version $new_version"
+    else
+        echo "⚠️  Demo app package.json not found at $demo_package_path"
+    fi
+}
+
 # Function to update package.json version
 update_package_version() {
     local new_version=$1
@@ -44,6 +75,9 @@ update_package_version() {
     
     # Update README.md with the new version
     update_readme_version $new_version
+    
+    # Update demo app package.json with the new version
+    update_demo_app_version $new_version
     
     echo "✅ package.json updated to $new_version"
 }
@@ -102,11 +136,14 @@ case $VERSION_ARG in
         # Update README.md with the new version
         update_readme_version $NEW_VERSION
         
+        # Update demo app package.json with the new version
+        update_demo_app_version $NEW_VERSION
+        
         echo "✅ Version updated: $CURRENT → $NEW_VERSION"
         echo ""
         echo "Next steps:"
         echo "  1. Review changes: git diff"
-        echo "  2. Commit: git add package.json && git commit -m 'Bump version to $NEW_VERSION'"
+        echo "  2. Commit: git add package.json README.md demoapp/package.json && git commit -m 'Bump version to $NEW_VERSION'"
         echo "  3. Create release: ./scripts/create-release.sh"
         ;;
     *)
@@ -123,7 +160,7 @@ case $VERSION_ARG in
         echo ""
         echo "Next steps:"
         echo "  1. Review changes: git diff"
-        echo "  2. Commit: git add package.json && git commit -m 'Bump version to $VERSION_ARG'"
+        echo "  2. Commit: git add package.json README.md demoapp/package.json && git commit -m 'Bump version to $VERSION_ARG'"
         echo "  3. Create release: ./scripts/create-release.sh"
         ;;
 esac

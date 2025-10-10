@@ -38,3 +38,5 @@ export type { DialogEntry, DialogRole, OpenAIContentBlock } from './shared/Commo
 export type { JSONSchema } from './shared/JSONSchema';
 export type { LLMSessionData } from './llms/LLMPotoModule';
 export type { MessagingClient } from './shared/MessageClient';
+
+export { roles } from './server/serverDecorators';

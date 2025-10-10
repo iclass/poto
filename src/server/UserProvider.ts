@@ -26,7 +26,11 @@ export class PotoUser {
 }
 
 export interface UserProvider {
-	findUserByUserId(uid:string): Promise<PotoUser>
+	/**
+	 * @param uid - The user's unique identifier
+	 * @returns The user if found, undefined otherwise
+	 */
+	findUserByUserId(uid:string): Promise<PotoUser | undefined>
 
 	/**
 	 *
