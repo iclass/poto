@@ -199,3 +199,5 @@ localonly/
 *.key
 credentials.json
 *.secret
+
+demoapp/

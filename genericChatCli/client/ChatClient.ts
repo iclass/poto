@@ -1,13 +1,9 @@
 import type { ChatServerModule } from "../server/ChatServerModule";
-import { PotoClient, PotoConstants } from "../../src/index";
+import { PotoClient } from "../../src/index";
 import { getAppEnv } from "../../src/AppEnv";
-import { ChatMessage, ModelInfo} from "../shared/types";
-import { DataPacket } from "../../src/shared/DataPacket";
+import { ModelInfo} from "../shared/types";
 import * as readline from 'readline';
-import { startServer } from "../server/ServerMain";
 import { ColorUtils } from "./ColorUtils";
-import { ChatConfigManager } from "./ChatConfig";
-import { MarkdownParser } from "./MarkdownParser";
 import { createMarkdownSplitter } from "../../src/shared/SimpleMarkdownTracker";
 import { CredentialManager, StoredCredentials } from "./CredentialManager";
 import { ChatCommandHandler, ChatCommandHandlerDependencies, ChatCommandHandlerCallbacks } from "./ChatCommandHandler";
