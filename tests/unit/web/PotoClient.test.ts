@@ -65,7 +65,7 @@ describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
         
         expect(capturedRequests).toHaveLength(1);
         expect(capturedRequests[0].method).toBe("POST");
-        expect(capturedRequests[0].url).toContain("/test/data");
+        expect(capturedRequests[0].url).toContain("/test/getdata");
         expect(capturedRequests[0].body).toBeDefined();
     });
 
@@ -79,7 +79,7 @@ describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
         
         expect(capturedRequests).toHaveLength(1);
         expect(capturedRequests[0].method).toBe("POST");
-        expect(capturedRequests[0].url).toContain("/test/imagesize");
+        expect(capturedRequests[0].url).toContain("/test/getimagesize");
         expect(capturedRequests[0].body).toBeDefined();
     });
 
@@ -93,7 +93,7 @@ describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
         
         expect(capturedRequests).toHaveLength(1);
         expect(capturedRequests[0].method).toBe("POST");
-        expect(capturedRequests[0].url).toContain("/test/bufferdata");
+        expect(capturedRequests[0].url).toContain("/test/getbufferdata");
         expect(capturedRequests[0].body).toBeDefined();
     });
 
@@ -107,7 +107,7 @@ describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
         
         expect(capturedRequests).toHaveLength(1);
         expect(capturedRequests[0].method).toBe("POST");
-        expect(capturedRequests[0].url).toContain("/test/blobdata");
+        expect(capturedRequests[0].url).toContain("/test/getblobdata");
         expect(capturedRequests[0].body).toBeDefined();
     });
 
@@ -122,7 +122,7 @@ describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
         
         expect(capturedRequests).toHaveLength(1);
         expect(capturedRequests[0].method).toBe("POST");
-        expect(capturedRequests[0].url).toContain("/test/dataview");
+        expect(capturedRequests[0].url).toContain("/test/getdataview");
         expect(capturedRequests[0].body).toBeDefined();
     });
 
@@ -135,7 +135,7 @@ describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
         
         expect(capturedRequests).toHaveLength(1);
         expect(capturedRequests[0].method).toBe("POST");
-        expect(capturedRequests[0].url).toContain("/test/file");
+        expect(capturedRequests[0].url).toContain("/test/deletefile");
         expect(capturedRequests[0].body).toBeDefined();
     });
 
@@ -192,7 +192,7 @@ describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
         
         expect(capturedRequests).toHaveLength(1);
         expect(capturedRequests[0].method).toBe("POST");
-        expect(capturedRequests[0].url).toContain("/test/nesteddata");
+        expect(capturedRequests[0].url).toContain("/test/getnesteddata");
         expect(capturedRequests[0].body).toBeDefined();
     });
 
@@ -209,7 +209,7 @@ describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
         
         expect(capturedRequests).toHaveLength(1);
         expect(capturedRequests[0].method).toBe("POST");
-        expect(capturedRequests[0].url).toContain("/test/arraydata");
+        expect(capturedRequests[0].url).toContain("/test/getarraydata");
         expect(capturedRequests[0].body).toBeDefined();
     });
 
@@ -237,7 +237,7 @@ describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
         
         expect(capturedRequests).toHaveLength(1);
         expect(capturedRequests[0].method).toBe("POST");
-        expect(capturedRequests[0].url).toContain("/test/mixeddata");
+        expect(capturedRequests[0].url).toContain("/test/getmixeddata");
         expect(capturedRequests[0].body).toBeDefined();
     });
 });

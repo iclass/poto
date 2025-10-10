@@ -484,6 +484,8 @@ export class PotoClient {
 						// This prevents URL length issues when arguments are serialized in the URL path
 						if (args.length > 0 && (httpMethod === 'get' || httpMethod === 'delete')) {
 							httpMethod = 'post';
+							// Keep the full method name for POST requests to maintain server-side routing
+							routePath = propKey.replace(/\$/g, '/').toLowerCase();
 						}
 					} else {
 						// Method doesn't start with HTTP verb - use POST as default

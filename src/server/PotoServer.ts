@@ -610,13 +610,21 @@ export function createHttpHandler<T extends PotoModule>(
 
 		// If method not found and this is a POST request, try to find the original GET method
 		// This handles cases where arguments force a GET method to use POST
-		// Only do this if the method name suggests it was originally a GET method
+		// The client keeps the full method name when forcing POST, so we need to look for it
 		if (!methodName && httpMethod === 'post') {
 			const routeMethodName = pathSegments[0].toLowerCase();
 			// Check if this looks like a GET method that was forced to POST
 			if (routeMethodName.startsWith('get') || routeMethodName.startsWith('delete')) {
+				// First try to find the method as a GET method with the full name
 				const getRouteKey = makeKey('get', routeMethodName);
 				methodName = urlToMethodMap[getRouteKey];
+				
+				// If still not found, try to find it as a POST method with the full name
+				// This handles cases where the method was originally registered as POST
+				if (!methodName) {
+					const postRouteKey = makeKey('post', routeMethodName);
+					methodName = urlToMethodMap[postRouteKey];
+				}
 			}
 		}
 

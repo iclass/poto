@@ -65,7 +65,7 @@ class DemoClient {
             // Test image size binary parameter passing
             console.log('🖼️  Testing binary parameter (image upload)...');
             // Load ai-genie.png from disk
-            let imageBuffer: Uint8Array = await fs.readFile('./src/ai-genie.png');
+            let imageBuffer: Uint8Array = await fs.readFile('./public/ai-genie.png');
 
             if (imageBuffer) {
                 console.log(`📊 Image buffer size: ${imageBuffer.length} bytes (${(imageBuffer.length / 1024).toFixed(1)} KB)`);
@@ -73,8 +73,13 @@ class DemoClient {
 
                 console.log('➡️  Sending ai-genie.png to server for image size...');
                 // Assume API: getImageSize(image: Uint8Array): Promise<{ width: number, height: number }>
-                const resp = await this.demoModule.getImageSize(imageBuffer);
-                console.log('📐 Server returned image size:', resp);
+                try {
+
+                    const resp = await this.demoModule.getImageSize(imageBuffer);
+                    console.log('📐 Server returned image size:', resp);
+                } catch (err) {
+                    console.error('❌ Failed to get image size:', err);
+                }
             } else {
                 console.log('⚠️  Could not find "ai-genie.png" in the src directory. Skipping image size binary param test.');
             }
