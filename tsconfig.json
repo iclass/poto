@@ -38,7 +38,7 @@
   },
   "include": [
     "src/**/*"
-, "tests/unit/server/GeneratorModuleExample.ts"  ],
+, ],
   "exclude": [
     "node_modules",
     "dist",

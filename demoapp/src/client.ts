@@ -1,5 +1,5 @@
 import { PotoClient } from 'poto';
-import { Constants } from './demoConsts';
+import { Constants, ServerInfo } from './demoConsts';
 import type { DemoModule } from './DemoModule';
 
 class DemoClient {
@@ -50,19 +50,13 @@ class DemoClient {
 
             // Step 4: Get server info
             console.log('ℹ️  Getting server information...');
-            const serverInfo = await this.demoModule.getServerInfo();
-            console.log('📊 Server info:', JSON.stringify(serverInfo, null, 2));
-            console.log('');
-
-            // Step 5: Test simple method first
-            console.log('🧪 Testing simple method...');
-            const streamTest = await this.demoModule.testSimpleCall(5);
-            console.log('📨 Stream test result:', streamTest);
+            const serverInfo: ServerInfo = await this.demoModule.getServerInfo();
+            console.log('📊 Server info:', serverInfo);
             console.log('');
 
             // Step 6: Test async generator (streaming) - temporarily disabled
             console.log('🌊 Testing async generator (streaming)...');
-            const stream = await this.demoModule.testStream(5);
+            const stream = await this.demoModule.testStream(2);
             for await (const item of stream) {
                 console.log('📨 Stream item:', item);
             }

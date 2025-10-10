@@ -24,18 +24,11 @@ export class DemoModule extends PotoModule {
         return `Echo: ${message} (from ${user?.id || 'anonymous'}), with session data: ${(await this.getSessionValue(Constants.sessionKey))}`;
     }
 
-    // Simple method that returns a string (for testing)
-    async testSimpleCall(count: number): Promise<string> {
-        const user = this.getCurrentUser();
-        const userId = user?.id || 'anonymous';
-
-        return `Stream test for ${count} items (user: ${userId})`;
-    }
 
     // Async generator method for streaming data
     async *testStream(count: number): AsyncGenerator<GenData> {
         const user = this.getCurrentUser();
-        const userId = user?.id || 'anonymous';
+        const userId = user?.id;
 
         for (let i = 1; i <= count; i++) {
             yield {
@@ -43,7 +36,7 @@ export class DemoModule extends PotoModule {
                 total: count,
                 message: `Processing step ${i} of ${count}`,
                 timestamp: new Date().toISOString(),
-                user: userId
+                user: userId || 'not logged in'
             };
 
             // Simulate some work
@@ -55,7 +48,7 @@ export class DemoModule extends PotoModule {
             total: count,
             message: 'Stream completed successfully!',
             timestamp: new Date().toISOString(),
-            user: userId
+            user: userId || 'not logged in'
         };
     }
 
