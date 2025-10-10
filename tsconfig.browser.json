@@ -1,0 +1,39 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist/browser",
+    "rootDir": "./src",
+    "lib": [
+      "DOM",
+      "ESNext"
+    ],
+    "types": [],
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": false
+  },
+  "include": [
+    "src/browser/**/*",
+    "src/web/**/*",
+    "src/shared/**/*",
+    "src/llms/LLMConfig.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "service",
+    "demo-iframe-rpc/**/*",
+    "example-usage/**/*",
+    "genericChatCli/**/*",
+    "tests/**/*",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/*.test.js",
+    "**/*.spec.js",
+    "src/server/**/*",
+    "src/llms/llm.ts",
+    "src/llms/LLMPotoModule.ts",
+    "src/llms/LLMSessionTracker.ts",
+    "src/llms/LLMStreamingExample.ts",
+    "src/shared/fetch-eventsource/quickSseTest.ts"
+  ]
+}

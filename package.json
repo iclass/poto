@@ -5,6 +5,16 @@
 	"private": false,
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"browser": "./dist/browser/index.js",
+			"node": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./browser": "./dist/browser/index.js",
+		"./server": "./dist/index.js",
+		"./package.json": "./package.json"
+	},
 	"files": [
 		"dist/**/*",
 		"src/**/*",
@@ -31,10 +41,13 @@
 		"quickchat": "bun genericChatCli/client/ChatClient.ts",
 		"chat-server": "bun --hot genericChatCli/start-server.ts",
 		"chat-client": "bun genericChatCli/start-client.ts",
-		"build": "bun run build:clean && bun run build:compile",
+		"build": "bun run build:clean && bun run build:server && bun run build:browser",
 		"build:clean": "rimraf dist",
-		"build:compile": "bun run tsc",
+		"build:server": "bun run tsc:server",
+		"build:browser": "node scripts/build-browser.js",
 		"tsc": "tsc --noEmit false --outDir dist --declaration --declarationMap",
+		"tsc:server": "tsc --noEmit false --outDir dist --declaration --declarationMap --project tsconfig.json",
+		"tsc:browser": "tsc --noEmit false --outDir dist/browser --declaration --declarationMap --project tsconfig.browser.json",
 		"test": "bun test --randomize",
 		"test:type-check": "tsc --project tsconfig.test.json --noEmit",
 		"prepublishOnly": "bun run build",
