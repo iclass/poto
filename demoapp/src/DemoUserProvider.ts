@@ -1,4 +1,4 @@
-import { UserProvider, PotoUser } from '../../dist';
+import { UserProvider, PotoUser } from 'poto';
 import { Constants } from './demoConsts';
 
 // Simple in-memory user provider for demo

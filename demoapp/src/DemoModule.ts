@@ -1,4 +1,4 @@
-import { PotoModule, roles } from '../../dist';
+import { PotoModule, roles } from 'poto';
 import { Constants } from './demoConsts';
 import { GenData, ServerInfo } from './demoConsts';
 
