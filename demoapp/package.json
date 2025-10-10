@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/server.ts",
   "scripts": {
-    "server": "bun run src/server.ts",
+    "server": "bun --max-http-header-size=1048576 run src/server.ts",
     "client": "bun run src/client.ts"
   },
   "dependencies": {

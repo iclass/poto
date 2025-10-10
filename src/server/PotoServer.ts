@@ -606,7 +606,19 @@ export function createHttpHandler<T extends PotoModule>(
 		}
 
 		const routeKey = makeKey(httpMethod, pathSegments[0].toLowerCase())
-		const methodName = urlToMethodMap[routeKey];
+		let methodName = urlToMethodMap[routeKey];
+
+		// If method not found and this is a POST request, try to find the original GET method
+		// This handles cases where arguments force a GET method to use POST
+		// Only do this if the method name suggests it was originally a GET method
+		if (!methodName && httpMethod === 'post') {
+			const routeMethodName = pathSegments[0].toLowerCase();
+			// Check if this looks like a GET method that was forced to POST
+			if (routeMethodName.startsWith('get') || routeMethodName.startsWith('delete')) {
+				const getRouteKey = makeKey('get', routeMethodName);
+				methodName = urlToMethodMap[getRouteKey];
+			}
+		}
 
 		if (!methodName) {
 			return new Response(`${PotoConstants.msg.BadRoute} ${routeKey}`, { status: 404 });

@@ -479,6 +479,12 @@ export class PotoClient {
 						// Method starts with HTTP verb - use the existing convention
 						httpMethod = methodMatch[1].toLowerCase();
 						routePath = methodMatch[2].replace(/\$/g, '/').toLowerCase();
+						
+						// Force POST method for GET/DELETE methods that have arguments
+						// This prevents URL length issues when arguments are serialized in the URL path
+						if (args.length > 0 && (httpMethod === 'get' || httpMethod === 'delete')) {
+							httpMethod = 'post';
+						}
 					} else {
 						// Method doesn't start with HTTP verb - use POST as default
 						httpMethod = "post";
