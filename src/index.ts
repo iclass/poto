@@ -11,8 +11,6 @@ export { PotoClient } from './web/rpc/PotoClient';
 
 // LLM exports
 export { LLM } from './llms/llm';
-export { LLMConfig } from './llms/LLMConfig';
-
 // Shared types and utilities - only export runtime values
 export { DialogRoles} from './shared/CommonTypes';
 export { PotoUser } from './server/UserProvider';
@@ -30,7 +28,6 @@ export { TypedJSON } from './shared/TypedJSON';
 export { PotoConstants } from './shared/PotoConstants';
 export { BunCookieSessionProvider } from './server/BunCookieSessionProvider';
 
-export { SseMessage } from './shared/MessageClient';
 // Type-only exports for TypeScript consumers
 export type { UserSessionProvider, UserSessionData } from './server/UserSessionProvider';
 export type { UserProvider } from './server/UserProvider';
@@ -40,3 +37,8 @@ export type { LLMSessionData } from './llms/LLMPotoModule';
 export type { MessagingClient } from './shared/MessageClient';
 
 export { roles } from './server/serverDecorators';
+
+export *  from './shared/MessageClient';
+export *  from './web/rpc/PotoClientWithProxy';
+export *  from './llms/LLMConfig';
+export *  from './web/rpc/RpcClient';

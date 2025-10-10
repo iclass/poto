@@ -9,7 +9,7 @@
     "client": "bun run src/client.ts"
   },
   "dependencies": {
-    "poto": "https://github.com/iclass/poto/releases/download/v1.0.5/poto.tar.gz"
+    "poto": "file:../"
   },
   "devDependencies": {
     "@types/bun": "^1.2.23"

@@ -11,6 +11,7 @@ import { ChatSessionManager, ChatSessionManagerDependencies, ChatSessionManagerC
 import { ChatResponseProcessor, ChatResponseProcessorDependencies, ChatResponseProcessorCallbacks } from "./ChatResponseProcessor";
 import fs from 'fs';
 import path from 'path';
+import { startServer } from "../server/ServerMain";
 
 export const port = parseInt(getAppEnv('PORT') || '3799');
 

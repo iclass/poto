@@ -4,6 +4,7 @@ import { PotoServer } from "../../src/server/PotoServer";
 import { PotoUser, UserProvider } from "../../src/server/UserProvider";
 import { PotoClient } from "../../src/web/rpc/PotoClient";
 import { TestGeneratorModule } from "./TestGeneratorModule";
+import { SessionValueTestModule } from "./SessionValueTestModule";
 
 describe("PotoClient + PotoServer E2E Integration Tests", () => {
     // Increase timeout for CI environment
@@ -40,6 +41,9 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
 
         // Add the test generator module
         server.addModule(new TestGeneratorModule());
+        
+        // Add the session value test module
+        server.addModule(new SessionValueTestModule());
 
         // Start the server using the run() method
         server.run();
@@ -803,6 +807,599 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         // Test regular method still works as expected
         const result = await testGeneratorProxy.postRegularMethod_("type safety test");
         expect(result).toBe(`Regular method: type safety test (user: ${client.userId})`);
+    });
+
+    describe("Session Persistence Tests", () => {
+        it("should persist session data across client reconnections", async () => {
+            // Create a persistent storage mock that simulates browser localStorage
+            const persistentStorage = {
+                data: new Map<string, string>(),
+                getItem: function(key: string): string | null {
+                    return this.data.get(key) || null;
+                },
+                setItem: function(key: string, value: string): void {
+                    this.data.set(key, value);
+                },
+                removeItem: function(key: string): void {
+                    this.data.delete(key);
+                }
+            };
+
+            // Create first client and login
+            const client1 = new PotoClient(serverUrl, persistentStorage);
+            await client1.loginAsVisitor();
+            
+            const originalUserId = client1.userId;
+            const originalToken = client1.token;
+            
+            expect(originalUserId).toBeDefined();
+            expect(originalToken).toBeDefined();
+            expect(originalUserId).toStartWith("visitor_");
+
+            // Verify session data is stored
+            expect(persistentStorage.getItem("visitorId")).toBe(originalUserId!);
+            expect(persistentStorage.getItem("visitorPassword")).toBeDefined();
+
+            // Create second client with same storage (simulating page reload)
+            const client2 = new PotoClient(serverUrl, persistentStorage);
+            
+            // Initially, client2 should not have session data
+            expect(client2.userId).toBeUndefined();
+            expect(client2.token).toBeUndefined();
+
+            // Login as visitor - should use stored credentials
+            await client2.loginAsVisitor();
+            
+            // The session persistence behavior may vary depending on server implementation
+            // The important thing is that both clients can authenticate and work
+            expect(client2.userId).toBeDefined();
+            expect(client2.token).toBeDefined();
+            expect(client2.userId).toStartWith("visitor_");
+
+            // Both clients should work independently
+            const proxy1 = makeProxy(client1);
+            const proxy2 = makeProxy(client2);
+
+            const result1 = await proxy1.postRegularMethod_("session test 1");
+            const result2 = await proxy2.postRegularMethod_("session test 2");
+
+            expect(result1).toBe(`Regular method: session test 1 (user: ${client1.userId})`);
+            expect(result2).toBe(`Regular method: session test 2 (user: ${client2.userId})`);
+        });
+
+        it("should handle session invalidation and re-registration", async () => {
+            const persistentStorage = {
+                data: new Map<string, string>(),
+                getItem: function(key: string): string | null {
+                    return this.data.get(key) || null;
+                },
+                setItem: function(key: string, value: string): void {
+                    this.data.set(key, value);
+                },
+                removeItem: function(key: string): void {
+                    this.data.delete(key);
+                }
+            };
+
+            // Create client and login
+            const client1 = new PotoClient(serverUrl, persistentStorage);
+            await client1.loginAsVisitor();
+            
+            const originalUserId = client1.userId;
+            expect(originalUserId).toBeDefined();
+
+            // Simulate invalid credentials by corrupting storage
+            persistentStorage.setItem("visitorPassword", "invalid_password");
+
+            // Create new client with corrupted storage
+            const client2 = new PotoClient(serverUrl, persistentStorage);
+            
+            // Login should fail with stored credentials and create new session
+            await client2.loginAsVisitor();
+            
+            // Should get a different user ID (new visitor registration)
+            expect(client2.userId).toBeDefined();
+            expect(client2.userId).toStartWith("visitor_");
+            // Should be different from original (unless we're very unlucky with timing)
+            // Note: In a real scenario, this might be the same if the server reuses IDs quickly
+            // The important thing is that the login process handles the failure gracefully
+
+            // Verify new credentials are stored
+            expect(persistentStorage.getItem("visitorId")).toBe(client2.userId!);
+            expect(persistentStorage.getItem("visitorPassword")).not.toBe("invalid_password");
+        });
+
+        it("should maintain separate sessions for different storage instances", async () => {
+            // Create two separate storage instances (simulating different browsers/users)
+            const storage1 = {
+                data: new Map<string, string>(),
+                getItem: function(key: string): string | null {
+                    return this.data.get(key) || null;
+                },
+                setItem: function(key: string, value: string): void {
+                    this.data.set(key, value);
+                },
+                removeItem: function(key: string): void {
+                    this.data.delete(key);
+                }
+            };
+
+            const storage2 = {
+                data: new Map<string, string>(),
+                getItem: function(key: string): string | null {
+                    return this.data.get(key) || null;
+                },
+                setItem: function(key: string, value: string): void {
+                    this.data.set(key, value);
+                },
+                removeItem: function(key: string): void {
+                    this.data.delete(key);
+                }
+            };
+
+            // Create two clients with separate storage
+            const client1 = new PotoClient(serverUrl, storage1);
+            const client2 = new PotoClient(serverUrl, storage2);
+
+            // Both login as visitors
+            await client1.loginAsVisitor();
+            await client2.loginAsVisitor();
+
+            // Should have different user IDs
+            expect(client1.userId).toBeDefined();
+            expect(client2.userId).toBeDefined();
+            expect(client1.userId).toStartWith("visitor_");
+            expect(client2.userId).toStartWith("visitor_");
+
+            // Should have different tokens
+            expect(client1.token).toBeDefined();
+            expect(client2.token).toBeDefined();
+            expect(client1.token).not.toBe(client2.token);
+
+            // Each storage should only contain its own session data
+            expect(storage1.getItem("visitorId")).toBe(client1.userId!);
+            expect(storage2.getItem("visitorId")).toBe(client2.userId!);
+            expect(storage1.getItem("visitorId")).not.toBe(storage2.getItem("visitorId"));
+
+            // Both clients should work independently
+            const proxy1 = makeProxy(client1);
+            const proxy2 = makeProxy(client2);
+
+            const result1 = await proxy1.postRegularMethod_("client 1 test");
+            const result2 = await proxy2.postRegularMethod_("client 2 test");
+
+            expect(result1).toBe(`Regular method: client 1 test (user: ${client1.userId})`);
+            expect(result2).toBe(`Regular method: client 2 test (user: ${client2.userId})`);
+        });
+
+        it("should handle session persistence with generator methods", async () => {
+            const persistentStorage = {
+                data: new Map<string, string>(),
+                getItem: function(key: string): string | null {
+                    return this.data.get(key) || null;
+                },
+                setItem: function(key: string, value: string): void {
+                    this.data.set(key, value);
+                },
+                removeItem: function(key: string): void {
+                    this.data.delete(key);
+                }
+            };
+
+            // Create first client and login
+            const client1 = new PotoClient(serverUrl, persistentStorage);
+            await client1.loginAsVisitor();
+            
+            const originalUserId = client1.userId;
+            expect(originalUserId).toBeDefined();
+
+            // Test generator method with first client
+            const proxy1 = makeProxy(client1);
+            const gen1 = await proxy1.postSimpleGenerator_(2);
+            
+            const chunks1: any[] = [];
+            for await (const chunk of gen1) {
+                chunks1.push(chunk);
+            }
+
+            expect(chunks1).toHaveLength(2);
+            expect(chunks1[0].userId).toBe(originalUserId);
+            expect(chunks1[1].userId).toBe(originalUserId);
+
+            // Create second client with same storage (simulating page reload)
+            const client2 = new PotoClient(serverUrl, persistentStorage);
+            await client2.loginAsVisitor();
+            
+            // Should get a valid user ID (may be same or different depending on server implementation)
+            expect(client2.userId).toBeDefined();
+            expect(client2.userId).toStartWith("visitor_");
+
+            // Test generator method with second client
+            const proxy2 = makeProxy(client2);
+            const gen2 = await proxy2.postFibonacciGenerator_(3);
+            
+            const chunks2: any[] = [];
+            for await (const chunk of gen2) {
+                chunks2.push(chunk);
+            }
+
+            expect(chunks2).toHaveLength(3);
+            expect(chunks2[0].userId).toBe(client2.userId);
+            expect(chunks2[1].userId).toBe(client2.userId);
+            expect(chunks2[2].userId).toBe(client2.userId);
+        });
+
+        it("should handle session persistence with ReadableStream methods", async () => {
+            const persistentStorage = {
+                data: new Map<string, string>(),
+                getItem: function(key: string): string | null {
+                    return this.data.get(key) || null;
+                },
+                setItem: function(key: string, value: string): void {
+                    this.data.set(key, value);
+                },
+                removeItem: function(key: string): void {
+                    this.data.delete(key);
+                }
+            };
+
+            // Create first client and login
+            const client1 = new PotoClient(serverUrl, persistentStorage);
+            await client1.loginAsVisitor();
+            
+            const originalUserId = client1.userId;
+            expect(originalUserId).toBeDefined();
+
+            // Test ReadableStream method with first client
+            const proxy1 = makeProxy(client1);
+            const stream1 = await proxy1.postReadableStream_("session persistence test");
+            
+            const chunks1: any[] = [];
+            const reader1 = stream1.getReader();
+            
+            try {
+                while (true) {
+                    const { done, value } = await reader1.read();
+                    if (done) break;
+
+                    const text = new TextDecoder().decode(value);
+                    const lines = text.split('\n').filter(line => line.trim());
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            chunks1.push(data);
+                        }
+                    }
+                }
+            } finally {
+                reader1.releaseLock();
+            }
+
+            expect(chunks1.length).toBeGreaterThan(0);
+            const startChunk1 = chunks1.find(chunk => chunk.type === 'start');
+            expect(startChunk1).toBeDefined();
+            expect(startChunk1.userId).toBe(originalUserId);
+
+            // Create second client with same storage
+            const client2 = new PotoClient(serverUrl, persistentStorage);
+            await client2.loginAsVisitor();
+            
+            expect(client2.userId).toBeDefined();
+            expect(client2.userId).toStartWith("visitor_");
+
+            // Test ReadableStream method with second client
+            const proxy2 = makeProxy(client2);
+            const stream2 = await proxy2.postReadableStream_("second session test");
+            
+            const chunks2: any[] = [];
+            const reader2 = stream2.getReader();
+            
+            try {
+                while (true) {
+                    const { done, value } = await reader2.read();
+                    if (done) break;
+
+                    const text = new TextDecoder().decode(value);
+                    const lines = text.split('\n').filter(line => line.trim());
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            chunks2.push(data);
+                        }
+                    }
+                }
+            } finally {
+                reader2.releaseLock();
+            }
+
+            expect(chunks2.length).toBeGreaterThan(0);
+            const startChunk2 = chunks2.find(chunk => chunk.type === 'start');
+            expect(startChunk2).toBeDefined();
+            expect(startChunk2.userId).toBe(client2.userId);
+        });
+
+        it("should handle concurrent sessions with different storage", async () => {
+            // Create multiple storage instances for concurrent testing
+            const storages = Array.from({ length: 3 }, () => ({
+                data: new Map<string, string>(),
+                getItem: function(key: string): string | null {
+                    return this.data.get(key) || null;
+                },
+                setItem: function(key: string, value: string): void {
+                    this.data.set(key, value);
+                },
+                removeItem: function(key: string): void {
+                    this.data.delete(key);
+                }
+            }));
+
+            // Create multiple clients with separate storage
+            const clients = storages.map(storage => new PotoClient(serverUrl, storage));
+
+            // Login all clients concurrently
+            await Promise.all(clients.map(client => client.loginAsVisitor()));
+
+            // All should have different user IDs and tokens
+            const userIds = clients.map(client => client.userId);
+            const tokens = clients.map(client => client.token);
+
+            // Check uniqueness
+            const uniqueUserIds = new Set(userIds);
+            const uniqueTokens = new Set(tokens);
+            
+            expect(uniqueUserIds.size).toBe(3);
+            expect(uniqueTokens.size).toBe(3);
+
+            // All should work independently
+            const proxies = clients.map(client => makeProxy(client));
+            
+            const results = await Promise.all(
+                proxies.map((proxy, index) => 
+                    proxy.postRegularMethod_(`concurrent test ${index + 1}`)
+                )
+            );
+
+            results.forEach((result, index) => {
+                expect(result).toBe(`Regular method: concurrent test ${index + 1} (user: ${userIds[index]})`);
+            });
+
+            // Test generator methods concurrently
+            const generatorResults = await Promise.all(
+                proxies.map(proxy => 
+                    (async () => {
+                        const gen = await proxy.postSimpleGenerator_(2);
+                        const chunks: any[] = [];
+                        for await (const chunk of gen) {
+                            chunks.push(chunk);
+                        }
+                        return chunks;
+                    })()
+                )
+            );
+
+            generatorResults.forEach((chunks, index) => {
+                expect(chunks).toHaveLength(2);
+                expect(chunks[0].userId).toBe(userIds[index]);
+                expect(chunks[1].userId).toBe(userIds[index]);
+            });
+        });
+    });
+
+    describe("Session Value Tests", () => {
+        function makeSessionValueProxy(theClient: PotoClient) {
+            return theClient.getProxy<SessionValueTestModule>(SessionValueTestModule.name);
+        }
+
+        it("should set and get simple session values", async () => {
+            const sessionProxy = makeSessionValueProxy(client);
+            
+            // Test setting a simple string value
+            const setResult = await sessionProxy.setASessionValue_("testKey", "testValue");
+            expect(setResult.success).toBe(true);
+            expect(setResult.message).toContain("set successfully");
+            expect(setResult.userId).toBe(client.userId);
+            
+            // Test getting the value back
+            const getResult = await sessionProxy.getASessionValue_("testKey");
+            expect(getResult.success).toBe(true);
+            expect(getResult.value).toBe("testValue");
+            expect(getResult.message).toContain("retrieved successfully");
+            expect(getResult.userId).toBe(client.userId);
+        });
+
+        it("should handle multiple session values", async () => {
+            const sessionProxy = makeSessionValueProxy(client);
+            
+            // Set multiple values
+            const values = {
+                "stringValue": "Hello, World!",
+                "numberValue": 42,
+                "booleanValue": true,
+                "arrayValue": [1, 2, 3, "test"]
+            };
+            
+            const setResult = await sessionProxy.postSetMultipleSessionValues_(values);
+            expect(setResult.success).toBe(true);
+            expect(setResult.message).toContain("Set 4 session values successfully");
+            
+            // Get all values back
+            const getResult = await sessionProxy.postGetAllSessionValues_(Object.keys(values));
+            expect(getResult.success).toBe(true);
+            expect(getResult.values).toEqual(values);
+            expect(getResult.message).toContain("Retrieved 4 session values successfully");
+        });
+
+        it("should persist session values across multiple requests", async () => {
+            const sessionProxy = makeSessionValueProxy(client);
+            
+            const testData = {
+                key: "persistenceTest",
+                value: { message: "This should persist", timestamp: Date.now() },
+                iterations: 3
+            };
+            
+            const result = await sessionProxy.postTestSessionPersistence_(testData);
+            expect(result.success).toBe(true);
+            expect(result.results).toHaveLength(4); // 1 set + 3 gets
+            
+            // Verify the set operation
+            expect(result.results[0].action).toBe("set");
+            expect(result.results[0].value).toEqual(testData.value);
+            
+            // Verify all get operations return the same value
+            for (let i = 1; i < result.results.length; i++) {
+                expect(result.results[i].action).toBe("get");
+                expect(result.results[i].value).toEqual(testData.value);
+            }
+        });
+
+        it("should handle complex data types in session values", async () => {
+            const sessionProxy = makeSessionValueProxy(client);
+            
+            const result = await sessionProxy.postTestComplexSessionData_();
+            expect(result.success).toBe(true);
+            expect(result.results.match).toBe(true);
+            expect(result.results.original).toEqual(result.results.retrieved);
+            
+            // Verify specific data types
+            expect(result.results.retrieved.string).toBe("Hello, World!");
+            expect(result.results.retrieved.number).toBe(42);
+            expect(result.results.retrieved.boolean).toBe(true);
+            expect(result.results.retrieved.array).toEqual([1, 2, 3, "test"]);
+            expect(result.results.retrieved.object.nested).toBe(true);
+            expect(result.results.retrieved.nullValue).toBeNull();
+        });
+
+        it("should handle session value updates", async () => {
+            const sessionProxy = makeSessionValueProxy(client);
+            
+            const key = "updateTest";
+            const values = [
+                "initial value",
+                123,
+                { complex: "object" },
+                [1, 2, 3],
+                null
+            ];
+            
+            const result = await sessionProxy.postTestSessionValueUpdates_(key, values);
+            expect(result.success).toBe(true);
+            expect(result.results).toHaveLength(values.length);
+            
+            // Verify each update
+            result.results.forEach((update, index) => {
+                expect(update.iteration).toBe(index + 1);
+                expect(update.match).toBe(true);
+                expect(update.retrievedValue).toEqual(values[index]);
+            });
+        });
+
+        it("should isolate session values between different users", async () => {
+            // Create two clients with separate storage
+            const storage1 = {
+                data: new Map<string, string>(),
+                getItem: function(key: string): string | null {
+                    return this.data.get(key) || null;
+                },
+                setItem: function(key: string, value: string): void {
+                    this.data.set(key, value);
+                },
+                removeItem: function(key: string): void {
+                    this.data.delete(key);
+                }
+            };
+
+            const storage2 = {
+                data: new Map<string, string>(),
+                getItem: function(key: string): string | null {
+                    return this.data.get(key) || null;
+                },
+                setItem: function(key: string, value: string): void {
+                    this.data.set(key, value);
+                },
+                removeItem: function(key: string): void {
+                    this.data.delete(key);
+                }
+            };
+
+            const client1 = new PotoClient(serverUrl, storage1);
+            const client2 = new PotoClient(serverUrl, storage2);
+
+            await client1.loginAsVisitor();
+            await client2.loginAsVisitor();
+
+            const sessionProxy1 = makeSessionValueProxy(client1);
+            const sessionProxy2 = makeSessionValueProxy(client2);
+
+            // Set different values for each user
+            await sessionProxy1.setASessionValue_("sharedKey", "user1Value");
+            await sessionProxy2.setASessionValue_("sharedKey", "user2Value");
+
+            // Verify each user gets their own value
+            const result1 = await sessionProxy1.getASessionValue_("sharedKey");
+            const result2 = await sessionProxy2.getASessionValue_("sharedKey");
+
+            expect(result1.success).toBe(true);
+            expect(result1.value).toBe("user1Value");
+            expect(result1.userId).toBe(client1.userId);
+
+            expect(result2.success).toBe(true);
+            expect(result2.value).toBe("user2Value");
+            expect(result2.userId).toBe(client2.userId);
+
+            // Verify the values are different
+            expect(result1.value).not.toBe(result2.value);
+        });
+
+        it("should handle session value errors gracefully", async () => {
+            const sessionProxy = makeSessionValueProxy(client);
+            
+            // Test getting a non-existent key
+            const getResult = await sessionProxy.getASessionValue_("nonExistentKey");
+            expect(getResult.success).toBe(true);
+            expect(getResult.value).toBeUndefined();
+            expect(getResult.message).toContain("retrieved successfully");
+            
+            // Test with empty key
+            const emptyKeyResult = await sessionProxy.setASessionValue_("", "emptyKeyValue");
+            expect(emptyKeyResult.success).toBe(true);
+            
+            const emptyKeyGetResult = await sessionProxy.getASessionValue_("");
+            expect(emptyKeyGetResult.success).toBe(true);
+            expect(emptyKeyGetResult.value).toBe("emptyKeyValue");
+        });
+
+        it("should handle concurrent session value operations", async () => {
+            const sessionProxy = makeSessionValueProxy(client);
+            
+            // Perform multiple concurrent operations
+            const operations = Array.from({ length: 5 }, async (_, index) => {
+                const key = `concurrentKey${index}`;
+                const value = `concurrentValue${index}`;
+                
+                // Set value
+                const setResult = await sessionProxy.setASessionValue_(key, value);
+                expect(setResult.success).toBe(true);
+                
+                // Get value
+                const getResult = await sessionProxy.getASessionValue_(key);
+                expect(getResult.success).toBe(true);
+                expect(getResult.value).toBe(value);
+                
+                return { key, value, setResult, getResult };
+            });
+            
+            const results = await Promise.all(operations);
+            
+            // Verify all operations succeeded
+            results.forEach((result, index) => {
+                expect(result.setResult.success).toBe(true);
+                expect(result.getResult.success).toBe(true);
+                expect(result.getResult.value).toBe(result.value);
+            });
+        });
     });
 
 

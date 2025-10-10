@@ -1,6 +1,6 @@
 import { PotoClient } from 'poto';
 import { Constants } from './demoConsts';
-import type { DemoModule } from './server';
+import type { DemoModule } from './DemoModule';
 
 class DemoClient {
     private client: PotoClient;
@@ -37,7 +37,7 @@ class DemoClient {
 
             // Step 2: Get greeting
             console.log('📝 Getting greeting from server...');
-            const greeting = await this.demoModule.getHello_();
+            const greeting = await this.demoModule.hello_();
             console.log('📨 Server response:', greeting);
             console.log('');
 

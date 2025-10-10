@@ -112,6 +112,27 @@ export class PotoModule {
 	}
 
 	/**
+	 * Set a session value and persist it immediately
+	 * @param key The session key to set
+	 * @param value The value to store
+	 */
+	protected async setSessionValue(key: string, value: any): Promise<void> {
+		await this.updateUserSession((session) => {
+			(session as any)[key] = value;
+		});
+	}
+
+	/**
+	 * Get a session value
+	 * @param key The session key to get
+	 * @returns The value of the session key, or undefined if the key does not exist
+	 */
+	protected async getSessionValue<T = any>(key: string): Promise<T | undefined> {
+		const session = await this.getUserSession();
+		return (session as any)[key];
+	}
+
+	/**
 	 * Delete session for the current user
 	 */
 	protected async deleteUserSession(): Promise<void> {
