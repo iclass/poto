@@ -1,11 +1,12 @@
-import { 
-    PotoServer, 
-    PotoUser, 
+import {
+    PotoServer,
+    PotoUser,
     BunCookieSessionProvider
 } from 'poto';
 
 import { DemoModule } from './DemoModule';
 import { DemoUserProvider } from './DemoUserProvider';
+import indexhtml from '../index.html';
 
 // Initialize and start the server
 async function startServer() {
@@ -14,6 +15,9 @@ async function startServer() {
         port: 3001,
         jwtSecret: 'demo-secret-key',
         staticDir: '', // No static files for this demo
+        routes: {
+            '/': indexhtml
+        }
     });
 
 

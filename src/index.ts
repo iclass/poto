@@ -4,16 +4,17 @@
 // Server exports
 export { PotoServer } from './server/PotoServer.js';
 export { PotoModule } from './server/PotoModule.js';
-export { LLMPotoModule } from './llms/LLMPotoModule.js';
 
 // Client exports
 export { PotoClient } from './web/rpc/PotoClient.js';
 
 // LLM exports
+export { LLMPotoModule } from './llms/LLMPotoModule.js';
 export { LLM } from './llms/llm.js';
 // Shared types and utilities - only export runtime values
 export { DialogRoles} from './shared/CommonTypes.js';
 export { PotoUser } from './server/UserProvider.js';
+export type { UserProvider } from './server/UserProvider';
 
 // Session management - export classes only (interfaces are compile-time only)
 export { InMemorySessionProvider, RedisSessionProvider } from './server/UserSessionProvider.js';
@@ -30,7 +31,6 @@ export { BunCookieSessionProvider } from './server/BunCookieSessionProvider.js';
 
 // Type-only exports for TypeScript consumers
 export type { UserSessionProvider, UserSessionData } from './server/UserSessionProvider';
-export type { UserProvider } from './server/UserProvider';
 export type { DialogEntry, DialogRole, OpenAIContentBlock } from './shared/CommonTypes';
 export type { JSONSchema } from './shared/JSONSchema';
 export type { LLMSessionData } from './llms/LLMPotoModule';
