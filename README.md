@@ -21,7 +21,7 @@
 ```bash
 
 # 安装特定版本
-bun add https://github.com/iclass/poto/releases/download/v1.0.1/poto.tar.gz     
+bun add https://github.com/iclass/poto/releases/download/v1.0.2/poto.tar.gz     
 
 ```
 
@@ -41,7 +41,7 @@ bun add https://github.com/iclass/poto/releases/download/v1.0.1/poto.tar.gz
      "version": "1.0.0",
      "type": "module",
      "dependencies": {
-       "poto": "https://github.com/iclass/poto/releases/download/v1.0.1/poto.tar.gz"
+       "poto": "https://github.com/iclass/poto/releases/download/v1.0.2/poto.tar.gz"
      }
    }
    ```
