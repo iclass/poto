@@ -14,8 +14,7 @@
   "include": [
     "src/browser/**/*",
     "src/web/**/*",
-    "src/shared/**/*",
-    "src/llms/LLMConfig.ts"
+    "src/shared/**/*"
   ],
   "exclude": [
     "node_modules",
@@ -30,10 +29,7 @@
     "**/*.test.js",
     "**/*.spec.js",
     "src/server/**/*",
-    "src/llms/llm.ts",
-    "src/llms/LLMPotoModule.ts",
-    "src/llms/LLMSessionTracker.ts",
-    "src/llms/LLMStreamingExample.ts",
+    "src/llms/**/*",
     "src/shared/fetch-eventsource/quickSseTest.ts"
   ]
 }

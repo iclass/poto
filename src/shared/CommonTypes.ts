@@ -2,43 +2,6 @@
  * the headmatters of an actor, to be used in the slides frontmatter of the first page
  */
 
-export class ActorHeadmatters {
-	name!: string;
-	role?: 'teacher' | 'assistant';
-	voiceOpts?: {
-		voiceId: string;
-		rate: string;
-		pitch: string;
-	};
-	guide: string = '';
-	enabled: boolean = true;
-	muted: boolean = false;
-
-	constructor(headmatters: Record<string, any>) {
-		Object.assign(this, headmatters);
-	}
-}
-
-export type NavStateQuick = {
-	editorShown: boolean;
-	courseId: string;
-	courseDeckFileName: string;
-	// these propers are udated from slidev
-	slideNo: number; // 1-based
-	clicks: number;
-	totalClicks: number;
-	hasNext: boolean;
-	hasPrev: boolean;
-	// the last narrated paragraph id, 0 based
-	lastParagraphId: number | undefined
-	revision: string // the revision of the course . probably shouldbe the revision of the current page
-	dialogs: DialogEntry[];
-	salt: string;
-	title?: string
-	temperature?: number
-	slideHtmlContent?: string
-};
-
 export const DialogRoles = ['system', 'user', 'assistant']
 
 export type DialogRole = 'system' | 'user' | 'assistant'
@@ -52,24 +15,6 @@ export type DialogEntry = {
 
 export type Dialogs = DialogEntry[]
 
-/**
- * Shared type for exchanging audio+metadata with the server API (frontend/backend)
- */
-export interface AudioCacheMeta {
-	version?: number;
-	audio: string | ArrayBuffer; // base64-encoded audio or ArrayBuffer
-	words?: string[];
-	wtimes?: number[];
-	wdurations?: number[];
-	visemes?: string[];
-	vtimes?: number[];
-	vdurations?: number[];
-	// markers?: string[];
-	mtimes?: number[];
-	emojis?: string[];
-	emojisTimes?: number[];
-	emojisMap?: Record<string, any>;
-}
 
 /**
  * Converts an async generator to a ReadableStream<Uint8Array>

@@ -314,7 +314,7 @@ export class TypedJSON {
    * @private
    */
   private static get isBunOrNode(): boolean {
-    return typeof process !== 'undefined' && process.versions && !!(process.versions.node || process.versions.bun);
+    return typeof process !== 'undefined' && process.versions && !!(process.versions.node || process.versions.bun) || false;
   }
   
   /**

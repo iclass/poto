@@ -5,13 +5,17 @@
   "type": "module",
   "main": "src/server.ts",
   "scripts": {
-    "server": "bun run --hot src/server.ts",
+    "server": "bun run src/server.ts",
     "client": "bun run src/client.ts"
   },
   "dependencies": {
-    "poto": "https://github.com/iclass/poto/releases/download/v1.0.11/poto.tar.gz"
+    "poto": "https://github.com/iclass/poto/releases/download/v1.0.11/poto.tar.gz",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@types/bun": "^1.2.23"
+    "@types/bun": "^1.2.23",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.1"
   }
 }

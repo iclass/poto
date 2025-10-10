@@ -6,15 +6,16 @@ import {
 
 import { DemoModule } from './DemoModule';
 import { DemoUserProvider } from './DemoUserProvider';
-import indexhtml from '../index.html';
+import { Constants } from './demoConsts';
+import indexhtml from '../public/index.html';
 
 // Initialize and start the server
 async function startServer() {
     // Create and configure the server
     const server = new PotoServer({
-        port: 3001,
+        port: Constants.port,
         jwtSecret: 'demo-secret-key',
-        staticDir: '', // No static files for this demo
+        staticDir: '/public', // Serve static files from current directory
         routes: {
             '/': indexhtml
         }

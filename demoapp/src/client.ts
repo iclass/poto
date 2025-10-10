@@ -6,7 +6,7 @@ class DemoClient {
     private client: PotoClient;
     private demoModule: DemoModule;
 
-    constructor(serverUrl: string = 'http://localhost:3001') {
+    constructor(serverUrl: string = `http://localhost:${Constants.port}`) {
         // Create in-memory storage for Node.js environment
         const memoryStorage = {
             data: new Map<string, string>(),
@@ -87,7 +87,7 @@ class DemoClient {
                 const adminData = await this.demoModule.getAdminSecret();
                 console.log('❗ Unexpectedly succeeded as demo user:', adminData);
             } catch (err) {
-                console.log('✅ Correctly failed as demo user:', err?.message || err);
+                console.log('✅ Correctly failed as demo user:', err);
             }
 
             // Now log in as admin and try again
@@ -103,7 +103,7 @@ class DemoClient {
                 const adminData = await this.demoModule.getAdminSecret();
                 console.log('✅ Successfully called admin-only method as admin:', adminData);
             } catch (err) {
-                console.log('❌ Failed as admin (unexpected):', err?.message || err);
+                console.log('❌ Failed as admin (unexpected):', err);
             }
             console.log('');
 

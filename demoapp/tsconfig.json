@@ -1,0 +1,64 @@
+{
+    "compilerOptions": {
+      // Basic TypeScript configuration
+      "target": "ES2022",
+      "lib": ["DOM", "DOM.Iterable", "ES2022"],
+      "module": "ESNext",
+      "moduleResolution": "bundler",
+      "allowImportingTsExtensions": true,
+      "resolveJsonModule": true,
+      "isolatedModules": true,
+      "noEmit": true,
+      
+      // React/JSX configuration
+      "jsx": "react-jsx",
+      "jsxImportSource": "react",
+      
+      // Strict type checking
+      "strict": true,
+      "noUnusedLocals": false,
+      "noUnusedParameters": false,
+      "exactOptionalPropertyTypes": false,
+      "noImplicitReturns": true,
+      "noFallthroughCasesInSwitch": true,
+      "noUncheckedIndexedAccess": false,
+      
+      // Module resolution
+      "baseUrl": ".",
+      "paths": {
+        "@/*": ["./src/*"]
+      },
+      "allowSyntheticDefaultImports": true,
+      "esModuleInterop": true,
+      "forceConsistentCasingInFileNames": true,
+      
+      // Additional options
+      "skipLibCheck": true,
+      "declaration": false,
+      "sourceMap": true,
+      "removeComments": false,
+      
+      // Bun-specific optimizations
+      "allowJs": true,
+      "checkJs": false,
+      
+      // Node.js compatibility for server-side code
+      "types": ["bun-types", "node"]
+    },
+    "include": [
+      "src/**/*",
+      "public/**/*"
+    ],
+    "exclude": [
+      "node_modules",
+      "dist",
+      "**/*.test.ts",
+      "**/*.test.tsx",
+      "**/*.spec.ts",
+      "**/*.spec.tsx"
+    ],
+    "ts-node": {
+      "esm": true
+    }
+  }
+  

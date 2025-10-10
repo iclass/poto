@@ -24,7 +24,7 @@ export type RpcMessage = RpcRequest | RpcResponse | RpcError;
 
 export class IframeRpcClient {
   private rpcIdCounter = 0;
-  private pendingRequests = new Map<string, { resolve: (value: any) => void; reject: (error: any) => void; timeout: NodeJS.Timeout }>();
+  private pendingRequests = new Map<string, { resolve: (value: any) => void; reject: (error: any) => void; timeout: any }>();
   private defaultTimeout = 30000; // 30 seconds
 
   constructor() {

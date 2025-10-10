@@ -9,6 +9,7 @@ export const Constants = {
     admin: 'admin',
   },
   sessionKey: 'a',
+  port: 3001,
 }
 
 export type GenData = {

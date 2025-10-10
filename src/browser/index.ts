@@ -20,7 +20,7 @@ export * from '../shared/MessageClient.js';
 
 // Type-only exports for TypeScript consumers
 export type { DialogEntry, DialogRole, OpenAIContentBlock } from '../shared/CommonTypes';
-export type { JSONSchema } from '../shared/JSONSchema';
+export type { JSONSchema } from '../shared/JSONSchema'
 export type { MessagingClient } from '../shared/MessageClient';
 
 // Note: Server-side exports like PotoServer, PotoModule, etc. are intentionally excluded

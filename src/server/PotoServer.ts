@@ -157,6 +157,8 @@ export class PotoServer {
 			
 			const contentType = mime.getType(resolvedPath) || "application/octet-stream";
 
+			console.debug("serving static file", resolvedPath, contentType);
+			
 			return new Response(file, {
 				status: 200,
 				headers: { "Content-Type": contentType },
@@ -173,6 +175,8 @@ export class PotoServer {
 	private isStaticFileRequest(pathname: string, method: string): boolean {
 		const staticExtensions = [
 			".js",
+			".ts",
+			".tsx",
 			".css",
 			".html",
 			".png",

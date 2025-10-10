@@ -56,6 +56,7 @@ const browserDist = './dist/browser';
 const serverDist = './dist';
 
 // Files that need to be copied from server dist to browser dist
+// Note: Only browser-compatible files are copied
 const filesToCopy = [
   'web/rpc/PotoClient.js',
   'web/rpc/PotoClient.d.ts',
@@ -86,9 +87,7 @@ const filesToCopy = [
   'shared/fetch-eventsource/parse.js',
   'shared/fetch-eventsource/parse.d.ts',
   'shared/fetch-eventsource/index.js',
-  'shared/fetch-eventsource/index.d.ts',
-  'llms/LLMConfig.js',
-  'llms/LLMConfig.d.ts'
+  'shared/fetch-eventsource/index.d.ts'
 ];
 
 console.log('📋 Copying files to browser build...');
@@ -112,6 +111,8 @@ for (const file of filesToCopy) {
   }
 }
 
+// PotoConstants is now browser-compatible and copied directly
+
 // Update the browser index.js to use relative paths within the browser directory
 console.log('🔧 Updating browser index.js...');
 const browserIndexPath = join(browserDist, 'index.js');
@@ -133,9 +134,6 @@ export { PotoConstants } from './shared/PotoConstants.js';
 
 // Message client and related utilities
 export * from './shared/MessageClient.js';
-
-// LLM config (browser-safe)
-export * from './llms/LLMConfig.js';
 
 // Note: Server-side exports like PotoServer, PotoModule, etc. are intentionally excluded
 // from this browser build to prevent Node.js/Bun built-in import errors
@@ -163,9 +161,6 @@ export { PotoConstants } from './shared/PotoConstants.js';
 
 // Message client and related utilities
 export * from './shared/MessageClient.js';
-
-// LLM config (browser-safe)
-export * from './llms/LLMConfig.js';
 
 // Type-only exports for TypeScript consumers
 export type { DialogEntry, DialogRole, OpenAIContentBlock } from './shared/CommonTypes.js';
