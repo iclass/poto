@@ -1,7 +1,7 @@
 {
 	"name": "poto",
 	"type": "module",
-	"version": "1.0.2",
+	"version": "1.0.4",
 	"private": false,
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
@@ -43,9 +43,9 @@
 		"version:minor": "./scripts/version.sh minor",
 		"version:major": "./scripts/version.sh major",
 		"release": "./scripts/create-release.sh",
-		"release:patch": "bun run version:patch && git add package.json README.md && git commit -m 'Bump version to $(node -p \"require('./package.json').version\")' && bun run release",
-		"release:minor": "bun run version:minor && git add package.json README.md && git commit -m 'Bump version to $(node -p \"require('./package.json').version\")' && bun run release",
-		"release:major": "bun run version:major && git add package.json README.md && git commit -m 'Bump version to $(node -p \"require('./package.json').version\")' && bun run release",
+		"release:patch": "bun run version:patch && git add package.json README.md demoapp/package.json && git commit -m 'Bump version to $(node -p \"require('./package.json').version\")' && bun run release",
+		"release:minor": "bun run version:minor && git add package.json README.md demoapp/package.json && git commit -m 'Bump version to $(node -p \"require('./package.json').version\")' && bun run release",
+		"release:major": "bun run version:major && git add package.json README.md demoapp/package.json && git commit -m 'Bump version to $(node -p \"require('./package.json').version\")' && bun run release",
 		"release:check": "git status --porcelain | wc -l | xargs -I {} sh -c 'if [ {} -ne 0 ]; then echo \"❌ Working directory not clean. Please commit changes first.\"; exit 1; else echo \"✅ Working directory clean, ready for release\"; fi'"
 	},
 	"dependencies": {

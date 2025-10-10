@@ -18,10 +18,13 @@
 
 ### 快速开始
 
+> 👀 **完整但极简的示例应用已包含在本仓库的 `demoapp/` 目录下。建议直接阅读和运行 `demoapp` 来快速了解 POTO 的最小用法及最佳实践！详情见 `demoapp/README.md`。  
+
+
 ```bash
 
 # 安装特定版本
-bun add https://github.com/iclass/poto/releases/download/v1.0.2/poto.tar.gz     
+bun add https://github.com/iclass/poto/releases/download/v1.0.4/poto.tar.gz     
 
 ```
 
@@ -41,7 +44,7 @@ bun add https://github.com/iclass/poto/releases/download/v1.0.2/poto.tar.gz
      "version": "1.0.0",
      "type": "module",
      "dependencies": {
-       "poto": "https://github.com/iclass/poto/releases/download/v1.0.2/poto.tar.gz"
+       "poto": "https://github.com/iclass/poto/releases/download/v1.0.4/poto.tar.gz"
      }
    }
    ```
