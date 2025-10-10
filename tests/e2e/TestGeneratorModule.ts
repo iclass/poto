@@ -26,7 +26,7 @@ export class TestGeneratorModule extends PotoModule {
         yield { status: "started", userId: user?.id };
         
         if (shouldError) {
-            throw new Error("Generator error occurred");
+            throw new Error("Generator error occurred as expected");
         }
         
         yield { status: "processing", data: "some data", userId: user?.id };
