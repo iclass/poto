@@ -1,6 +1,6 @@
 {
   "name": "poto-demo-app",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Minimal demo application showcasing Poto framework",
   "type": "module",
   "main": "src/server.ts",
@@ -9,7 +9,7 @@
     "client": "bun run src/client.ts"
   },
   "dependencies": {
-    "poto": "https://github.com/iclass/poto/releases/download/v1.0.4/poto.tar.gz"
+    "poto": "https://github.com/iclass/poto/releases/download/v1.0.5/poto.tar.gz"
   },
   "devDependencies": {
     "@types/bun": "^1.2.23"
