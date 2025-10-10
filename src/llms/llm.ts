@@ -1,6 +1,6 @@
 import { CompletionResponse, RawLLMResponse, RawResponsesResponse, TokenUsage, convertResponsesToCompletionResponse } from "../server/CompletionResponse";
 import { JSONSchema } from "../shared/JSONSchema";
-import {getAppEnv} from '../AppEnv'
+import {getAppEnv} from '../server/AppEnv'
 import { DialogEntry, DialogRole, OpenAIContentBlock, DialogRoles } from "../shared/CommonTypes";
 import { DataPacket } from "../shared/DataPacket";
 import { LLMConfig } from "./LLMConfig";

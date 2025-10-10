@@ -1,4 +1,4 @@
-import { getAppEnv } from '../AppEnv';
+import { getAppEnv } from '../server/AppEnv';
 
 export interface LLMConfigOptions {
   name: string;

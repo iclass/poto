@@ -17,8 +17,6 @@ export { PotoConstants } from '../shared/PotoConstants.js';
 // Message client and related utilities
 export * from '../shared/MessageClient.js';
 
-// LLM config (browser-safe)
-export * from '../llms/LLMConfig.js';
 
 // Type-only exports for TypeScript consumers
 export type { DialogEntry, DialogRole, OpenAIContentBlock } from '../shared/CommonTypes';
