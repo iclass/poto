@@ -18,7 +18,14 @@ async function startServer() {
         staticDir: '/public', // Serve static files from current directory
         routes: {
             '/': indexhtml
-        }
+        },
+        development: {
+            // Enable Hot Module Reloading
+            hmr: true,
+    
+            // Echo console logs from the browser to the terminal
+            console: true,
+        },    
     });
 
 

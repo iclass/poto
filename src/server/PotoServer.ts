@@ -19,14 +19,48 @@ export type RouteHandler = (httpMethod: string, pathname: string, authHeader: st
 
 type SignedUserId = { userId: string }
 
+export type PotoServerDevelopment = 
+	| boolean
+	| {
+		/**
+		 * Enable Hot Module Replacement for routes (including React Fast Refresh, if React is in use)
+		 *
+		 * @default true if process.env.NODE_ENV !== 'production'
+		 */
+		hmr?: boolean;
+
+		/**
+		 * Enable console log streaming from browser to server
+		 * @default false
+		 */
+		console?: boolean;
+
+		/**
+		 * Enable automatic workspace folders for Chrome DevTools
+		 *
+		 * This lets you persistently edit files in the browser.
+		 * The response is a JSON object with the following shape:
+		 * {
+		 *   "workspace": {
+		 *     "root": "<cwd>",
+		 *     "uuid": "<uuid>"
+		 *   }
+		 * }
+		 * For security reasons, if the remote socket address is not from localhost, 127.0.0.1, or ::1, the request is ignored.
+		 * @default true
+		 */
+		chromeDevToolsAutomaticWorkspaceFolders?: boolean;
+	};
+
 export interface PotoServerConfig {
 	port: number;
 	staticDir: string;
 	jwtSecret: string;
 	// defaultFile?: string;
 	routePrefix?: string;
+	// the value of each route is a RouteValue type in Bun 
 	routes?: Record<string, any>;
-	development?: Record<string, any>;
+	development?: PotoServerDevelopment;
 }
 
 export class PotoServer {
@@ -49,7 +83,7 @@ export class PotoServer {
 	private loginHandler?: (userId: string) => Promise<void>; // Login callback handler
 
 	private routes?: Record<string, any>;
-	private development?: Record<string, any>;
+	private development?: PotoServerDevelopment;
 
 	constructor({ port, staticDir, jwtSecret, routePrefix = '', routes, development }: PotoServerConfig) {
 		this.port = port;

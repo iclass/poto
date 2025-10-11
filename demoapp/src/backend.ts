@@ -9,7 +9,7 @@ serve({
 
     development: {
         // Enable Hot Module Reloading
-        hmr: false,
+        hmr: true,
 
         // Echo console logs from the browser to the terminal
         console: true,

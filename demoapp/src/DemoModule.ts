@@ -10,12 +10,13 @@ export class DemoModule extends PotoModule {
 
 
     // Simple greeting method
-    async hello_(): Promise<string> {
+    async hello_(message: string): Promise<string> {
         // Option 1: Use cleaner setSession helper method
-        await this.setSessionValue(Constants.sessionKey, 'test session data');
+        // console.log('setting session data: ' + message);
+        await this.setSessionValue(Constants.sessionKey, message);
 
         const user = this.getCurrentUser();
-        return `Hello ${user?.id || 'anonymous'}! Welcome to the Poto demo.`;
+        return `Hello ${user?.id || 'anonymous'}! Welcome back. message stored in session: ${message}`;
     }
 
     // Simple message method

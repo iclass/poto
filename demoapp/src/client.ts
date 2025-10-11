@@ -37,7 +37,7 @@ class DemoClient {
 
             // Step 2: Get greeting
             console.log('📝 Getting greeting from server...');
-            const greeting = await this.demoModule.hello_();
+            const greeting = await this.demoModule.hello_('hi...');
             console.log('📨 Server response:', greeting);
             console.log('');
 
@@ -46,6 +46,10 @@ class DemoClient {
             const message = 'Hello from the demo client!';
             const echo = await this.demoModule.postMessage_(message);
             console.log('📨 Server echo:', echo);
+            if (!echo.includes('hi...')) {
+                console.error('❌ Failed to retrieve session data in: ' + echo);
+                throw new Error('failed to retrieve session data');
+            }
             console.log('');
 
             // Step 4: Get server info
