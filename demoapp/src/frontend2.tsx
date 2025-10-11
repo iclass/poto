@@ -122,7 +122,7 @@ export function MyApp2() {
 
         updateState({ loading: true });
         try {
-            const greeting = await state.current.demoModule.hello_();
+            const greeting = await state.current.demoModule.hello_("hi...");
             updateState({
                 results: { ...state.current.results, greeting, error: undefined }
             });

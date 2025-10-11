@@ -91,7 +91,7 @@ export function MyApp() {
 
         setLoading(true);
         try {
-            const greeting = await demoModule.hello_();
+            const greeting = await demoModule.hello_("hi...");
             setResults(prev => ({ ...prev, greeting, error: undefined }));
         } catch (error) {
             console.error('❌ Failed to get greeting:', error);

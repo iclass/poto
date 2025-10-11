@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { PotoClient } from 'poto';
 import { Constants, ServerInfo, GenData, ImageSize } from "./demoConsts";
 import type { DemoModule } from "./DemoModule";
-import { makeState } from "./stateUtils";
+import { makeState } from "./ReactiveState";
 
 
 // the bundler makes sure the root is always there before this script is executed
