@@ -991,6 +991,91 @@ describe('TypedJSON - Mixed JSON Support', () => {
       expect(deserializedA.next.next.next).toBe(deserializedA);
     });
 
+    test('should skip circular reference resolution for data without circular refs (OPTIMIZATION)', () => {
+      // This test verifies the optimization that skips _resolveReferences when not needed
+      
+      // Large TypedArray (like in real-world image upload scenarios)
+      const largeArray = new Uint8Array(100 * 1024); // 100KB
+      for (let i = 0; i < largeArray.length; i++) {
+        largeArray[i] = i % 256;
+      }
+
+      const data = {
+        image: largeArray,
+        metadata: {
+          name: 'test.png',
+          size: largeArray.length,
+          timestamp: new Date()
+        },
+        tags: ['image', 'upload']
+      };
+
+      const startTime = performance.now();
+      const serialized = TypedJSON.stringify(data);
+      const parsed = TypedJSON.parse(serialized);
+      const endTime = performance.now();
+
+      // Verify correctness
+      expect(parsed.image).toBeInstanceOf(Uint8Array);
+      expect(parsed.image.length).toBe(100 * 1024);
+      expect(parsed.metadata.name).toBe('test.png');
+      expect(parsed.metadata.timestamp).toBeInstanceOf(Date);
+      expect(parsed.tags).toEqual(['image', 'upload']);
+
+      // Verify performance: deserialization should be fast (< 100ms for 100KB)
+      // Without optimization, this would take 1000ms+
+      const deserializeTime = endTime - startTime;
+      expect(deserializeTime).toBeLessThan(200); // Generous threshold for CI environments
+    });
+
+    test('should NOT skip circular reference resolution when circular refs exist', () => {
+      // This ensures the optimization doesn't break actual circular reference handling
+      
+      const largeArray = new Uint8Array(1024);
+      for (let i = 0; i < largeArray.length; i++) {
+        largeArray[i] = i % 256;
+      }
+
+      // Data WITH circular references
+      const obj: any = {
+        data: largeArray,
+        metadata: { name: 'test' }
+      };
+      obj.self = obj; // Create circular reference
+
+      const serialized = TypedJSON.stringify(obj);
+      const parsed = TypedJSON.parse(serialized);
+
+      // Verify circular reference is preserved
+      expect(parsed.self).toBe(parsed);
+      expect(parsed.data).toBeInstanceOf(Uint8Array);
+      expect(parsed.data.length).toBe(1024);
+      expect(parsed.metadata.name).toBe('test');
+    });
+
+    test('should handle array of TypedArrays without circular ref markers', () => {
+      // Simulates RPC call format: arguments are wrapped in an array
+      const imageData = new Uint8Array(50 * 1024); // 50KB
+      for (let i = 0; i < imageData.length; i++) {
+        imageData[i] = i % 256;
+      }
+
+      // This is how RPC wraps arguments
+      const args = [imageData];
+
+      const serialized = TypedJSON.stringify(args);
+      const parsed = TypedJSON.parse(serialized);
+
+      // Verify correctness
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed[0]).toBeInstanceOf(Uint8Array);
+      expect(parsed[0].length).toBe(50 * 1024);
+      
+      // Verify first and last bytes match
+      expect(parsed[0][0]).toBe(0);
+      expect(parsed[0][parsed[0].length - 1]).toBe((50 * 1024 - 1) % 256);
+    });
+
     test('should handle array circular references correctly', () => {
       // Create array circular reference
       const arr: any[] = [1, 2, 3];

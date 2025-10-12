@@ -50,6 +50,7 @@
 		"tsc:browser": "tsc --noEmit false --outDir dist/browser --declaration --declarationMap --project tsconfig.browser.json",
 		"test": "bun test --randomize",
 		"test:type-check": "tsc --project tsconfig.test.json --noEmit",
+		"bench:typedjson": "bun run tests/performance/TypedJSON.bench.ts",
 		"prepublishOnly": "bun run build",
 		"version": "./scripts/version.sh",
 		"version:patch": "./scripts/version.sh patch",

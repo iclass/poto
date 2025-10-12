@@ -463,14 +463,51 @@ export class TypedJSON {
    */
   static parse<T = any>(jsonString: string): T {
     const parsed = JSON.parse(jsonString);
+
     const refs = new Map<number, any>();
     const result = this._deserializeValue(parsed, refs);
     
     // Second pass: resolve all references
-    const visited = new WeakSet();
-    this._resolveReferences(result, refs, visited);
+    // Skip this expensive operation if no circular references exist in the data
+    // Check if the serialized data actually contains __refId markers (indicating circular refs)
+    const hasCircularRefs = this._hasCircularRefMarkers(result);
+    if (hasCircularRefs && refs.size > 0) {
+      const visited = new WeakSet();
+      this._resolveReferences(result, refs, visited);
+    }
     
     return result as T;
+  }
+  
+  /**
+   * Check if deserialized data contains circular reference markers
+   * This is a quick scan to detect if _resolveReferences needs to run
+   */
+  private static _hasCircularRefMarkers(value: any, depth: number = 0, maxDepth: number = 20): boolean {
+    if (depth > maxDepth) return false;
+    if (value === null || value === undefined) return false;
+    
+    if (typeof value === 'object') {
+      // Check for __refId marker (indicates refs need resolution)
+      if ('__refId' in value) return true;
+      
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (this._hasCircularRefMarkers(item, depth + 1, maxDepth)) return true;
+        }
+      } else if (!(value instanceof Date) && !(value instanceof RegExp) && 
+                 !(value instanceof Map) && !(value instanceof Set) &&
+                 !ArrayBuffer.isView(value) && !(value instanceof ArrayBuffer)) {
+        // Only check plain objects
+        for (const key in value) {
+          if (value.hasOwnProperty(key)) {
+            if (this._hasCircularRefMarkers(value[key], depth + 1, maxDepth)) return true;
+          }
+        }
+      }
+    }
+    
+    return false;
   }
 
   /**
@@ -914,6 +951,7 @@ export class TypedJSON {
       // Copy data from SharedArrayBuffer to ArrayBuffer
       new Uint8Array(arrayBuffer).set(new Uint8Array(buffer));
     }
+    
     const base64 = this._arrayBufferToBase64(arrayBuffer);
     
     return {
@@ -1242,6 +1280,7 @@ export class TypedJSON {
       this._validateBase64Size(typedArrayData.data, this.MAX_ARRAY_BUFFER_SIZE, 'TypedArray');
       
       const binary = this._base64Decode(typedArrayData.data);
+      
       const array = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) {
         array[i] = binary.charCodeAt(i);
@@ -1250,12 +1289,15 @@ export class TypedJSON {
       // Reconstruct the TypedArray using the constructor name
       // Since we always serialize with byteOffset: 0, we can safely use that
       const TypedArrayConstructor = (globalThis as any)[typedArrayData.constructor];
+      let result;
       if (TypedArrayConstructor) {
-        return new TypedArrayConstructor(array.buffer, typedArrayData.byteOffset, typedArrayData.byteLength / TypedArrayConstructor.BYTES_PER_ELEMENT);
+        result = new TypedArrayConstructor(array.buffer, typedArrayData.byteOffset, typedArrayData.byteLength / TypedArrayConstructor.BYTES_PER_ELEMENT);
       } else {
         // Fallback to Uint8Array if constructor not found
-        return new Uint8Array(array.buffer, typedArrayData.byteOffset, typedArrayData.byteLength);
+        result = new Uint8Array(array.buffer, typedArrayData.byteOffset, typedArrayData.byteLength);
       }
+      
+      return result;
     }
     
     if (this.TYPE_MARKERS.DATA_VIEW in typedValue) {

@@ -241,3 +241,139 @@ describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
         expect(capturedRequests[0].body).toBeDefined();
     });
 });
+
+describe("PotoClient _hasBlob Performance Tests", () => {
+    let client: PotoClient;
+    let mockStorage: any;
+
+    beforeEach(() => {
+        // Create mock storage
+        mockStorage = {
+            data: new Map<string, string>(),
+            getItem(key: string): string | null {
+                return this.data.get(key) || null;
+            },
+            setItem(key: string, value: string): void {
+                this.data.set(key, value);
+            },
+            removeItem(key: string): void {
+                this.data.delete(key);
+            }
+        };
+
+        client = new PotoClient("http://localhost:3000", mockStorage);
+        
+        // Mock fetch to return quickly
+        global.fetch = async () => {
+            return new Response(JSON.stringify({ success: true }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        };
+    });
+
+    test("should NOT iterate through TypedArray elements when checking for Blobs (OPTIMIZATION)", async () => {
+        // This test verifies the _hasBlob optimization for large TypedArrays
+        
+        const proxy = client.getProxy<{
+            uploadImage(imageData: Uint8Array): Promise<any>;
+        }>("test");
+        
+        // Large TypedArray similar to real-world image upload (2MB)
+        const largeImage = new Uint8Array(2 * 1024 * 1024);
+        for (let i = 0; i < Math.min(1000, largeImage.length); i++) {
+            largeImage[i] = i % 256;
+        }
+
+        const startTime = performance.now();
+        await proxy.uploadImage(largeImage);
+        const endTime = performance.now();
+
+        const totalTime = endTime - startTime;
+        
+        // With the optimization, this should complete quickly (< 500ms)
+        // Without optimization, checking 2M elements would take 1000ms+
+        expect(totalTime).toBeLessThan(1000); // Generous for CI, should be ~100ms locally
+    });
+
+    test("should still detect actual Blobs in nested structures", async () => {
+        const proxy = client.getProxy<{
+            getData(data: { file: Blob; metadata: string }): Promise<any>;
+        }>("test");
+        
+        const blob = new Blob(['test content'], { type: 'text/plain' });
+        const data = {
+            file: blob,
+            metadata: 'test'
+        };
+
+        // Should detect the Blob and use async serialization
+        // This is verified by the fact it doesn't throw an error
+        await expect(proxy.getData(data)).resolves.toBeDefined();
+    });
+
+    test("should handle mixed TypedArrays and Blobs correctly", async () => {
+        const proxy = client.getProxy<{
+            uploadMixed(image: Uint8Array, thumbnail: Blob): Promise<any>;
+        }>("test");
+        
+        const image = new Uint8Array(1024);
+        const thumbnail = new Blob(['thumb'], { type: 'image/png' });
+
+        // Should detect the Blob (not be confused by TypedArray)
+        await expect(proxy.uploadMixed(image, thumbnail)).resolves.toBeDefined();
+    });
+
+    test("should handle large TypedArray in array without performance degradation", async () => {
+        const proxy = client.getProxy<{
+            processImages(images: Uint8Array[]): Promise<any>;
+        }>("test");
+        
+        // Multiple large images
+        const images = [
+            new Uint8Array(500 * 1024), // 500KB each
+            new Uint8Array(500 * 1024),
+            new Uint8Array(500 * 1024)
+        ];
+
+        const startTime = performance.now();
+        await proxy.processImages(images);
+        const endTime = performance.now();
+
+        const totalTime = endTime - startTime;
+        
+        // Should complete quickly even with multiple large arrays
+        expect(totalTime).toBeLessThan(1000);
+    });
+
+    test("should skip ArrayBuffer when checking for Blobs", async () => {
+        const proxy = client.getProxy<{
+            uploadBuffer(buffer: ArrayBuffer): Promise<any>;
+        }>("test");
+        
+        const largeBuffer = new ArrayBuffer(1 * 1024 * 1024); // 1MB
+
+        const startTime = performance.now();
+        await proxy.uploadBuffer(largeBuffer);
+        const endTime = performance.now();
+
+        // Should not iterate through buffer
+        expect(endTime - startTime).toBeLessThan(500);
+    });
+
+    test("should skip Date, RegExp, Map, Set when checking for Blobs", async () => {
+        const proxy = client.getProxy<{
+            uploadData(data: { date: Date; regex: RegExp; map: Map<string, string>; set: Set<number> }): Promise<any>;
+        }>("test");
+        
+        const data = {
+            date: new Date(),
+            regex: /test/gi,
+            map: new Map([['key1', 'value1'], ['key2', 'value2']]),
+            set: new Set([1, 2, 3, 4, 5])
+        };
+
+        // These objects should be skipped during Blob detection
+        await expect(proxy.uploadData(data)).resolves.toBeDefined();
+    });
+});

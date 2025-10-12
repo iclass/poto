@@ -40,7 +40,9 @@ export function parseTypedJson<T = any>(jsonString: string): T {
  */
 export function stringifyTypedJson(data: any, space?: string | number): string {
   // Check if the data contains types that need preservation
-  if (needsTypePreservation(data)) {
+  const needsPreservation = needsTypePreservation(data);
+  
+  if (needsPreservation) {
     return TypedJSON.stringify(data, space);
   }
   

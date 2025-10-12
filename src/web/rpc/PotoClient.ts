@@ -544,43 +544,43 @@ export class PotoClient {
 						...(signal && { signal })
 					};
 
-					if (httpMethod === "get" || httpMethod === "delete") {
-						// Append each argument as a JSON-encoded path segment in the URL
-						requestArgs.forEach((arg) => {
-							const jsonArg = stringifyTypedJson(arg);
-							url += `/${encodeURIComponent(jsonArg)}`;
-						});
-					} else if (httpMethod === "post" || httpMethod === "put") {
-						// Check if any argument contains Blobs
-						const hasBlobs = this._containsBlobs(requestArgs);
-						if (hasBlobs) {
-							// Use async serialization for Blobs
-							const argsString = await stringifyTypedJsonAsync(requestArgs);
-							options.body = argsString;
-						} else {
-							// Use sync serialization for non-Blob data
-							const argsString = stringifyTypedJson(requestArgs);
-							options.body = argsString;
-						}
+				if (httpMethod === "get" || httpMethod === "delete") {
+					// Append each argument as a JSON-encoded path segment in the URL
+					requestArgs.forEach((arg) => {
+						const jsonArg = stringifyTypedJson(arg);
+						url += `/${encodeURIComponent(jsonArg)}`;
+					});
+				} else if (httpMethod === "post" || httpMethod === "put") {
+					// Check if any argument contains Blobs
+					const hasBlobs = this._containsBlobs(requestArgs);
+					if (hasBlobs) {
+						// Use async serialization for Blobs
+						const argsString = await stringifyTypedJsonAsync(requestArgs);
+						options.body = argsString;
+					} else {
+						// Use sync serialization for non-Blob data
+						const argsString = stringifyTypedJson(requestArgs);
+						options.body = argsString;
 					}
+				}
 
-					// Track request start
-					this.activeRequestCount++;
-					
-					// Log HTTP request if verbose mode is enabled
-					if (this.verboseCallback && this.verboseCallback()) {
-						console.log(`>> [${this.userId || 'anonymous'}] ${httpMethod.toUpperCase()} ${url}`);
-						if (options.body) {
-							console.log(`   Body: ${options.body}`);
-						}
-						if (Object.keys(headers).length > 0) {
-							console.log(`   Headers: ${JSON.stringify(headers, null, 2)}`);
-						}
+				// Track request start
+				this.activeRequestCount++;
+				
+				// Log HTTP request if verbose mode is enabled
+				if (this.verboseCallback && this.verboseCallback()) {
+					console.log(`>> [${this.userId || 'anonymous'}] ${httpMethod.toUpperCase()} ${url}`);
+					if (options.body) {
+						console.log(`   Body: ${options.body}`);
 					}
-					
-					let response: Response;
-					try {
-						response = await fetch(url, options);
+					if (Object.keys(headers).length > 0) {
+						console.log(`   Headers: ${JSON.stringify(headers, null, 2)}`);
+					}
+				}
+				
+			let response: Response;
+			try {
+				response = await fetch(url, options);
 
 						// Log HTTP response if verbose mode is enabled
 						if (this.verboseCallback && this.verboseCallback()) {
@@ -631,14 +631,15 @@ export class PotoClient {
 						return stream;
 					}
 					
-					if (contentType.includes(PotoConstants.appJson)) {
-						const jsonText = await response.text();
-						return parseTypedJson(jsonText);
-					} else if (contentType.startsWith("text/")) {
-						return response.text();
-					} else {
-						return response.arrayBuffer();
-					}
+			if (contentType.includes(PotoConstants.appJson)) {
+				const jsonText = await response.text();
+				const result = parseTypedJson(jsonText);
+				return result;
+				} else if (contentType.startsWith("text/")) {
+					return response.text();
+				} else {
+					return response.arrayBuffer();
+				}
 				};
 			},
 		}) as T;
@@ -659,11 +660,18 @@ export class PotoClient {
 		
 		if (obj instanceof Blob) return true;
 		
+		// Skip TypedArrays, ArrayBuffers, and other binary types - they can't contain Blobs
+		if (ArrayBuffer.isView(obj) || obj instanceof ArrayBuffer) return false;
+		
 		if (Array.isArray(obj)) {
 			return obj.some(item => this._hasBlob(item, depth + 1, maxDepth));
 		}
 		
 		if (obj && typeof obj === 'object') {
+			// Also skip Date, RegExp, Map, Set
+			if (obj instanceof Date || obj instanceof RegExp || obj instanceof Map || obj instanceof Set) {
+				return false;
+			}
 			return Object.values(obj).some(value => this._hasBlob(value, depth + 1, maxDepth));
 		}
 		
