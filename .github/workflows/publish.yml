@@ -28,7 +28,7 @@ jobs:
       run: bun install
       
     - name: Run tests
-      run: bun test
+      run: bun test --randomize=false
       
     - name: Build project
       run: bun run build
