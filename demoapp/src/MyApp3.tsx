@@ -150,14 +150,16 @@ export function MyApp3({
         if (!$.demoModule || !$.selectedFile) return;
 
         $.loading = true;
+        
         try {
             const arrayBuffer = await $.selectedFile.arrayBuffer();
             const imageBuffer = new Uint8Array(arrayBuffer);
             const imageSize = await $.demoModule.getImageSize(imageBuffer);
+            
             $.results.imageSize = imageSize;
             $.results.error = undefined;
         } catch (error) {
-            console.error('❌ Failed to get image size:', error);
+            console.error('Failed to get image size:', error);
             $.results.error = `Failed to get image size: ${error}`;
         } finally {
             $.loading = false;
