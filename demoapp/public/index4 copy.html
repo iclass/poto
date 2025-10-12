@@ -1,0 +1,19 @@
+<html>
+  <head>
+    <title>Poto Demo App - Class-Based</title>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+  <script type="module">
+    // Bootstrap - import and render the component
+    import { createElement } from "react";
+    import { createRoot } from "react-dom/client";
+    import { MyApp4 } from "../src/MyApp4.tsx";
+    
+    const rootEl = document.getElementById("root");
+    const appRoot = createRoot(rootEl);
+    appRoot.render(createElement(MyApp4));
+  </script>
+</html>
+

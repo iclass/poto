@@ -67,7 +67,7 @@ export class DemoModule extends PotoModule {
 
     // Admin-only method that requires admin role
     @roles(Constants.roles.admin)
-    async getAdminSecret(): Promise<object> {
+    async getAdminSecret(): Promise<{secret: string, adminUser: string, timestamp: string, clearance: string, message: string}> {
         const user = this.getCurrentUser();
         return {
             secret: 'This is a top-secret admin-only message!',

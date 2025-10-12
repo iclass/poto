@@ -531,3 +531,191 @@ export function createStateWithPatterns<T extends Record<string, any>>(
     
     return enhancedState as T & Partial<StateWithLoading & StateWithUser & StateWithResults>;
 }
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * makeStateForClass - Reactive State for Class Components
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 
+ * Creates a reactive state object that works with React class components.
+ * Unlike makeState(), this doesn't use hooks, so it's compatible with classes.
+ * 
+ * Usage Pattern:
+ * ```typescript
+ * class MyComponent extends Component {
+ *     private $ = makeStateForClass({
+ *         loading: false,
+ *         count: 0
+ *     });
+ * 
+ *     private unsubscribe?: () => void;
+ * 
+ *     constructor(props: any) {
+ *         super(props);
+ *         // Subscribe to changes - triggers forceUpdate on state changes
+ *         this.unsubscribe = this.$._subscribe(() => this.forceUpdate());
+ *     }
+ * 
+ *     componentWillUnmount() {
+ *         this.unsubscribe?.();
+ *     }
+ * 
+ *     handleClick = () => {
+ *         this.$.count++; // Auto re-renders! No setState needed!
+ *     }
+ * 
+ *     render() {
+ *         return <div onClick={this.handleClick}>{this.$.count}</div>;
+ *     }
+ * }
+ * ```
+ * 
+ * @template T - The type of the state object
+ * @param initialState - The initial state values (can be a plain object or factory function)
+ * @returns A reactive state proxy with _subscribe method
+ */
+export function makeStateForClass<T extends Record<string, any>>(
+    initialState: T | (() => { state: T; cleanup?: () => void })
+): T & { _subscribe: (callback: () => void) => () => void; _cleanup?: () => void } {
+    // ═════════════════════════════════════════════════════════════════════════
+    // HANDLE FACTORY FUNCTION (like frontend3's lazy initialization pattern)
+    // ═════════════════════════════════════════════════════════════════════════
+    // If initialState is a function, call it to get the actual state + cleanup
+    let actualState: T;
+    let cleanupFn: (() => void) | undefined;
+    
+    if (typeof initialState === 'function') {
+        const result = initialState();
+        actualState = result.state;
+        cleanupFn = result.cleanup;
+    } else {
+        actualState = initialState;
+    }
+    
+    // ═════════════════════════════════════════════════════════════════════════
+    // CREATE THE REACTIVE STATE MANAGER
+    // ═════════════════════════════════════════════════════════════════════════
+    const manager = new ReactiveState(actualState);
+    const proxy = manager.getState();
+    
+    // ═════════════════════════════════════════════════════════════════════════
+    // ATTACH HIDDEN METHODS TO PROXY
+    // ═════════════════════════════════════════════════════════════════════════
+    // _subscribe: Used in constructor to connect state changes to forceUpdate()
+    // _cleanup: User-provided cleanup function (if any)
+    (proxy as any)._subscribe = (callback: () => void) => {
+        return manager.subscribe(callback);
+    };
+    
+    if (cleanupFn) {
+        (proxy as any)._cleanup = cleanupFn;
+    }
+    
+    return proxy as T & { _subscribe: (callback: () => void) => () => void; _cleanup?: () => void };
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ReactiveComponent - Base Class for Reactive React Components
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 
+ * A React Component base class that makes ALL properties reactive automatically.
+ * Just extend this class and define properties normally - they become reactive!
+ * 
+ * Usage Pattern:
+ * ```typescript
+ * import { ReactiveComponent } from './ReactiveState';
+ * 
+ * class MyCounter extends ReactiveComponent {
+ *     // Just declare properties - they become reactive automatically!
+ *     count = 0;
+ *     message = 'Hello';
+ *     loading = false;
+ * 
+ *     // Methods work normally
+ *     increment = () => {
+ *         this.count++; // Auto re-renders! No setState needed!
+ *     }
+ * 
+ *     render() {
+ *         return <div onClick={this.increment}>{this.count}</div>;
+ *     }
+ * }
+ * ```
+ * 
+ * How it works:
+ * - The constructor returns a Proxy wrapper around `this`
+ * - All property assignments are intercepted
+ * - Changes trigger forceUpdate() automatically
+ * - Pure TypeScript feel - just regular class properties!
+ */
+
+import { Component } from 'react';
+
+export class ReactiveComponent<P = {}, S = {}> extends Component<P, S> {
+    private _reactiveStateManager?: ReactiveState<any>;
+    private _unsubscribe?: () => void;
+
+    constructor(props: P) {
+        super(props);
+        
+        // We'll set up reactivity in a moment, after the subclass constructor runs
+        // and initializes all properties
+    }
+
+    componentDidMount() {
+        // ═════════════════════════════════════════════════════════════════════
+        // SET UP REACTIVITY AFTER COMPONENT MOUNTS
+        // ═════════════════════════════════════════════════════════════════════
+        // At this point, all class properties have been initialized
+        // We can now collect them and make them reactive
+        
+        // Collect all own properties (excluding React/Component internals)
+        const reactiveProps: Record<string, any> = {};
+        const prototype = Object.getPrototypeOf(this);
+        
+        // Get all property names defined on the instance
+        Object.getOwnPropertyNames(this).forEach(key => {
+            // Skip private properties, React internals, and methods
+            if (!key.startsWith('_') && 
+                key !== 'props' && 
+                key !== 'context' && 
+                key !== 'refs' &&
+                key !== 'updater' &&
+                key !== 'state' &&
+                typeof (this as any)[key] !== 'function') {
+                reactiveProps[key] = (this as any)[key];
+            }
+        });
+
+        // Create reactive state manager
+        this._reactiveStateManager = new ReactiveState(reactiveProps);
+        const proxy = this._reactiveStateManager.getState();
+        
+        // Subscribe to changes
+        this._unsubscribe = this._reactiveStateManager.subscribe(() => {
+            this.forceUpdate();
+        });
+        
+        // Replace instance properties with proxy getters/setters
+        Object.keys(reactiveProps).forEach(key => {
+            Object.defineProperty(this, key, {
+                get() {
+                    return proxy[key];
+                },
+                set(value) {
+                    proxy[key] = value;
+                },
+                enumerable: true,
+                configurable: true
+            });
+        });
+    }
+
+    componentWillUnmount() {
+        // Clean up subscription
+        if (this._unsubscribe) {
+            this._unsubscribe();
+        }
+    }
+}
