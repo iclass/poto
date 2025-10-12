@@ -1,6 +1,6 @@
 import "reflect-metadata";
 import jwt, { TokenExpiredError } from "jsonwebtoken";
-import { serve } from "bun";
+import { serve, Server } from "bun";
 import path from "path";
 import mime from "mime";
 import { PotoConstants } from "../shared/PotoConstants";
@@ -66,8 +66,7 @@ export interface PotoServerConfig {
 export class PotoServer {
 	private routeHandlers: RouteHandler[] = [];
 	private port: number;
-	// Use ReturnType to infer Server type from serve() function, supporting different Bun versions
-	public server?: ReturnType<typeof serve>;
+	public server?: Server;
 	private staticDir: string;
 	// private defaultFile: string;
 	public jwtSecret: string;
