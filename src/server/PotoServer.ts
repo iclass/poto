@@ -66,7 +66,7 @@ export interface PotoServerConfig {
 export class PotoServer {
 	private routeHandlers: RouteHandler[] = [];
 	private port: number;
-	public server?: Server;
+	public server?: any; // Using 'any' to support both Bun versions (generic and non-generic Server type)
 	private staticDir: string;
 	// private defaultFile: string;
 	public jwtSecret: string;
