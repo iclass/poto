@@ -9,6 +9,11 @@ import mime from "mime";
 import { PotoModule } from "../../../src/server/PotoModule";
 import { PotoUser, UserProvider } from "../../../src/server/UserProvider";
 
+// Helper to generate random port in safe range
+function getRandomPort(): number {
+	return Math.floor(Math.random() * 30000) + 30000;
+}
+
 describe("PotoServer serveStaticFile Tests", () => {
 	let potoServer: PotoServer;
 	const staticDir = path.resolve(__dirname, "public");
@@ -21,7 +26,7 @@ describe("PotoServer serveStaticFile Tests", () => {
 		// Create a test file
 		await fs.writeFile(testFilePath, "Hello, this is a test file");
 		
-		potoServer = new PotoServer({ port: 3000, staticDir, jwtSecret: 'my secret' });
+		potoServer = new PotoServer({ port: getRandomPort(), staticDir, jwtSecret: 'my secret' });
 	});
 
 	afterAll(async () => {
@@ -141,7 +146,6 @@ describe("PotoServer Endpoints", () => {
 
 	it("should return 400 for missing required parameters in GET requests", async () => {
 		const response = await handleRequest(`/${TestApi.name}/user`, "GET");
-		console.debug({response, status: response.status, text: await response.text()})
 		expect(response.status).toBe(400);
 	});
 

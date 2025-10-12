@@ -9,8 +9,6 @@ describe("Repeated Segments Fix", () => {
     });
 
     it("should not repeat content when processing incrementally", () => {
-        console.log("\n🔧 Testing Repeated Segments Fix\n");
-        
         // Simulate the problematic scenario
         const chunks = [
             "Here's a sample of ",
@@ -26,11 +24,8 @@ describe("Repeated Segments Fix", () => {
         let displayedContent = '';
         let totalOutput = '';
 
-        console.log("📡 Processing chunks incrementally...\n");
-
         for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i];
-            console.log(`📦 Chunk ${i + 1}: "${chunk.trim()}"`);
             
             // Feed chunk to state tracker
             feedChunkSimple(state, chunk);
@@ -46,8 +41,6 @@ describe("Repeated Segments Fix", () => {
                 const newContent = snapshot.substring(processedContent.length);
                 
                 if (newContent.trim()) {
-                    console.log(`   ✅ Processing new content: "${newContent.trim()}"`);
-                    
                     // Process only the new content
                     const result = MarkdownParser.parseStreamingWithAiColor(
                         newContent,
@@ -59,27 +52,13 @@ describe("Repeated Segments Fix", () => {
                     processedContent = snapshot;
                     displayedContent += result.outputText;
                     totalOutput += result.outputText;
-                    
-                    console.log(`   📄 Output length: ${result.outputText.length}`);
-                } else {
-                    console.log(`   ⏳ No new content to process`);
                 }
-            } else {
-                console.log(`   ⏳ Buffering... (buffer length: ${state.buffer.length})`);
             }
         }
-
-        console.log(`\n📊 Results:`);
-        console.log(`   - Total output length: ${totalOutput.length}`);
-        console.log(`   - Processed content length: ${processedContent.length}`);
-        console.log(`   - State buffer length: ${state.buffer.length}`);
 
         // Verify no repeated content
         const outputLines = totalOutput.split('\n');
         const uniqueLines = new Set(outputLines);
-        
-        console.log(`   - Total lines: ${outputLines.length}`);
-        console.log(`   - Unique lines: ${uniqueLines.size}`);
         
         // Should not have excessive repetition
         expect(uniqueLines.size).toBeGreaterThan(outputLines.length * 0.5); // At least 50% unique lines
@@ -88,8 +67,6 @@ describe("Repeated Segments Fix", () => {
         expect(totalOutput).toContain("Here's a sample of");
         expect(totalOutput).toContain("Heading Level 1");
         expect(totalOutput).toContain("blockquote");
-        
-        console.log("\n✅ No repeated segments detected!\n");
     });
 
     it("should handle progressive content without repetition", () => {

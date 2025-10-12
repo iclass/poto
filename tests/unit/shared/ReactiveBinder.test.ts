@@ -5,12 +5,12 @@ import { describe, expect, it } from 'bun:test';
 describe('Reactive Module Test Suite', () => {
 	class DecoratorTestSettings {
 		@Reactive<number>((value, oldValue) => {
-			console.log(`Decorator: numberProp changed from ${oldValue} to ${value}`);
+			// Callback for testing decorator reactivity
 		})
 		numberProp = 10;
 
 		@Reactive<string>((value, oldValue) => {
-			console.log(`Decorator: stringProp changed from ${oldValue} to ${value}`);
+			// Callback for testing decorator reactivity
 		})
 		stringProp = 'initial';
 	}
@@ -28,10 +28,10 @@ describe('Reactive Module Test Suite', () => {
 		bindProperties() {
 			this.binder
 				.onChange('numberProp', (value, oldValue) => {
-					console.log(`Binder: numberProp changed from ${oldValue} to ${value}`);
+					// Callback for testing binder reactivity
 				})
 				.onChange('stringProp', (value, oldValue) => {
-					console.log(`Binder: stringProp changed from ${oldValue} to ${value}`);
+					// Callback for testing binder reactivity
 				});
 		}
 	}
@@ -82,7 +82,7 @@ describe('Reactive Module Test Suite', () => {
 
 			constructor() {
 				this.binder.onChange('dynamicProp', (value, oldValue) => {
-					console.log(`Dynamic property changed from ${oldValue} to ${value}`);
+					// Callback for testing dynamic property binding
 				});
 			}
 		}

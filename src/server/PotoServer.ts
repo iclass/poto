@@ -160,6 +160,8 @@ export class PotoServer {
 			throw new Error("Invalid argument: Expected an instance of a class, but received a constructor function.");
 		}
 
+		// Inject the server's session provider into the module
+		module.sessionProvider = this.sessionProvider;
 
 		// Extract the constructor from the instance's prototype
 		const classType = Object.getPrototypeOf(module).constructor
@@ -190,8 +192,6 @@ export class PotoServer {
 			}
 			
 			const contentType = mime.getType(resolvedPath) || "application/octet-stream";
-
-			console.debug("serving static file", resolvedPath, contentType);
 			
 			return new Response(file, {
 				status: 200,
@@ -201,7 +201,6 @@ export class PotoServer {
 			if (error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT") {
 				return new Response("File not found", { status: 404 });
 			}
-			console.error("Error serving static file:", error);
 			return new Response("Internal Server Error", { status: 500 });
 		}
 	}
@@ -276,7 +275,7 @@ export class PotoServer {
 			const token = jwt.sign({ userId: user.id } as SignedUserId, this.jwtSecret, { expiresIn: 60 * 60 });
 			return new Response(stringifyTypedJson({ token, userId: user.id }), { status: 200, headers: { "Content-Type": PotoConstants.appJson } });
 		} catch (error) {
-			console.error("Login error:", error);
+			// Login verification failed (e.g., invalid password format)
 			return new Response("Internal Server Error", { status: 500 });
 		}
 	}
@@ -976,12 +975,10 @@ export async function extractArgs(httpMethod: string, pathSegments: string[], re
 	} else if (httpMethod === "post" || httpMethod === "put") {
 		try {
 			const body = req.json ? (await req.json()) : req
-			// console.debug('body:', body)
 			// Deserialize TypedJSON data for POST/PUT requests
 			const deserializedBody = Array.isArray(body) ? body.map(item => parseTypedJson(JSON.stringify(item))) : parseTypedJson(JSON.stringify(body));
 			params = Array.isArray(deserializedBody) ? deserializedBody : [deserializedBody];
 		} catch (err) {
-			console.warn('body:', err)
 			// Handle case where body is empty or invalid JSON
 			params = [];
 		}

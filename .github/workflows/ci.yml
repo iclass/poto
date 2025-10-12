@@ -32,7 +32,7 @@ jobs:
     - name: Run tests
       run: |
         echo "Running tests with verbose output..."
-        bun test --randomize --verbose
+        bun test tests --randomize
       env:
         CI: true
       

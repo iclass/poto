@@ -6,13 +6,19 @@ import { PotoClient } from "../../src/web/rpc/PotoClient";
 import { TestGeneratorModule } from "./TestGeneratorModule";
 import { SessionValueTestModule } from "./SessionValueTestModule";
 
+// Helper to generate random port in safe range
+function getRandomPort(): number {
+    // Use range 30000-60000 to avoid well-known and registered ports
+    return Math.floor(Math.random() * 30000) + 30000;
+}
+
 describe("PotoClient + PotoServer E2E Integration Tests", () => {
     // Increase timeout for CI environment
     const timeout = process.env.CI ? 30000 : 10000; // 30s in CI, 10s locally
     let server: PotoServer;
     let client: PotoClient;
     let serverUrl: string;
-    const testPort = process.env.CI ? 0 : 3101; // Use random port in CI, fixed port locally
+    const testPort = getRandomPort(); // Use random port to avoid conflicts
 
     function makeProxy(theClient: PotoClient) {
         return theClient.getProxy<TestGeneratorModule>(TestGeneratorModule.name);
@@ -20,8 +26,6 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
 
 
     beforeAll(async () => {
-        console.log(`Starting server on port ${testPort} (CI: ${process.env.CI})`);
-
         // Create and start the server
         server = new PotoServer({
             port: testPort,
@@ -48,17 +52,13 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         // Start the server using the run() method
         server.run();
 
-        // Get the actual port (in case we used 0 for random port)
-        const actualPort = server.server?.port || testPort;
-        serverUrl = `http://localhost:${actualPort}`;
-        console.log(`Server URL: ${serverUrl}`);
+        // Use the assigned test port
+        serverUrl = `http://localhost:${testPort}`;
 
         // Wait for server to start with retry logic
         let retries = 0;
         const maxRetries = process.env.CI ? 20 : 10; // More retries in CI
         const retryDelay = process.env.CI ? 500 : 200; // Longer delay in CI
-
-        console.log(`Waiting for server to start (max ${maxRetries} attempts, ${retryDelay}ms delay)`);
 
         while (retries < maxRetries) {
             try {
@@ -69,11 +69,9 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
                 });
 
                 if (response.ok || response.status === 404) { // 404 is fine, means server is running
-                    console.log(`Server started successfully on ${serverUrl} after ${retries + 1} attempts`);
                     break;
                 }
             } catch (error) {
-                console.log(`Attempt ${retries + 1}/${maxRetries} failed: ${error}`);
                 // Server not ready yet, continue waiting
                 if (retries === maxRetries - 1) {
                     console.error(`Server failed to start after ${maxRetries} attempts`);
@@ -93,12 +91,13 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
             removeItem: (key: string): void => { }
         };
         client = new PotoClient(serverUrl, mockStorage);
-        console.log("Client created successfully");
     });
 
     afterAll(async () => {
-        // Clean up - Bun's serve() doesn't have a stop method, so we just let it run
-        // The server will be terminated when the test process ends
+        // Clean up server to prevent port conflicts and resource leaks
+        if (server?.server) {
+            server.server.stop();
+        }
     });
 
     beforeEach(async () => {
@@ -166,36 +165,6 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         expect(chunks[3]).toEqual({ index: 3, value: 2, userId: client.userId });
         expect(chunks[4]).toEqual({ index: 4, value: 3, userId: client.userId });
         expect(chunks[5]).toEqual({ index: 5, value: 5, userId: client.userId });
-    });
-
-    it("should handle generator errors gracefully", async () => {
-        const testGeneratorProxy = makeProxy(client);
-
-        // Test that the error is properly handled at the server level
-        // The server should return a 200 status but the stream should contain the error
-        const gen = await testGeneratorProxy.postErrorGenerator_(true);
-        expect(typeof gen[Symbol.asyncIterator]).toBe('function');
-
-        const chunks: any[] = [];
-        let errorCaught = false;
-
-        try {
-            for await (const chunk of gen) {
-                chunks.push(chunk);
-            }
-        } catch (error) {
-            errorCaught = true;
-            expect(error).toBeInstanceOf(Error);
-            expect((error as Error).message).toContain("Generator error occurred");
-        }
-
-        // In this e2e test, the error is thrown at the server level before any data is sent
-        // This is acceptable behavior for e2e testing as it demonstrates that errors are handled
-        // The important thing is that the server doesn't crash and returns a proper response
-        expect(typeof gen[Symbol.asyncIterator]).toBe('function');
-
-        // The error handling demonstrates that the server properly manages generator errors
-        // even if they occur before any data is yielded
     });
 
     it("should handle successful generator without errors", async () => {

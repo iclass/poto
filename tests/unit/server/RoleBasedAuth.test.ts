@@ -3,6 +3,11 @@ import { PotoServer } from "../../../src/server/PotoServer";
 import { PotoUser } from "../../../src/server/UserProvider";
 import { TestRoleApi } from "./TestRoleApi";
 
+// Helper to generate random port in safe range
+function getRandomPort(): number {
+	return Math.floor(Math.random() * 30000) + 30000;
+}
+
 describe("PotoServer Role-Based Authorization", () => {
 
 	let server: PotoServer;
@@ -10,7 +15,7 @@ describe("PotoServer Role-Based Authorization", () => {
 
 	beforeEach(() => {
 		server = new PotoServer({
-			port: 3000,
+			port: getRandomPort(),
 			staticDir: "./public",
 			jwtSecret: "testSecret"
 		});

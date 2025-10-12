@@ -3,13 +3,18 @@ import { PotoServer } from "../../../src/server/PotoServer";
 import { GeneratorModuleExample } from "./GeneratorModuleExample";
 import { PotoUser, UserProvider } from "../../../src/server/UserProvider";
 
+// Helper to generate random port in safe range
+function getRandomPort(): number {
+	return Math.floor(Math.random() * 30000) + 30000;
+}
+
 describe("PotoServer Generator Method Support", () => {
 	let server: PotoServer;
 	let handler: any;
 
 	beforeEach(() => {
 		server = new PotoServer({
-			port: 3000,
+			port: getRandomPort(),
 			staticDir: "./public",
 			jwtSecret: "testSecret"
 		});

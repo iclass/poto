@@ -5,13 +5,19 @@ import { PotoUser, UserProvider } from "../../src/server/UserProvider";
 import { PotoClient } from "../../src/web/rpc/PotoClient";
 import { ContextIsolationTestModule } from "./ContextIsolationTestModule";
 
+// Helper to generate random port in safe range
+function getRandomPort(): number {
+    // Use range 30000-60000 to avoid well-known and registered ports
+    return Math.floor(Math.random() * 30000) + 30000;
+}
+
 describe("Context Isolation Tests", () => {
     // Increase timeout for CI environment
     const timeout = process.env.CI ? 30000 : 10000; // 30s in CI, 10s locally
     let server: PotoServer;
     let client: PotoClient;
     let serverUrl: string;
-    const testPort = process.env.CI ? 0 : 3301; // Use random port in CI, fixed port locally
+    const testPort = getRandomPort(); // Use random port to avoid conflicts
 
 
     beforeAll(async () => {
@@ -40,9 +46,8 @@ describe("Context Isolation Tests", () => {
         // Start the server using the run() method
         server.run();
 
-        // Get the actual port (in case we used 0 for random port)
-        const actualPort = server.server?.port || testPort;
-        serverUrl = `http://localhost:${actualPort}`;
+        // Use the assigned test port
+        serverUrl = `http://localhost:${testPort}`;
         console.log(`Server URL: ${serverUrl}`);
 
         // Wait for server to start with retry logic
@@ -89,8 +94,11 @@ describe("Context Isolation Tests", () => {
     });
 
     afterAll(async () => {
-        // Clean up - Bun's serve() doesn't have a stop method, so we just let it run
-        // The server will be terminated when the test process ends
+        // Clean up server to prevent port conflicts and resource leaks
+        if (server?.server) {
+            server.server.stop();
+            console.log("Context Isolation test server stopped");
+        }
     });
 
     beforeEach(async () => {

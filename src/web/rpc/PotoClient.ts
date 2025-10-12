@@ -133,7 +133,6 @@ export class PotoClient {
 		const data = await response.json();
 		this.userId = data.userId;
 		this.token = data.token;
-		console.log(`Logged in as user with ID: ${this.userId}`);
 	}
 
 	/**
@@ -149,16 +148,12 @@ export class PotoClient {
 		const storedPassword = this.storage.getItem(PASSWORD);
 
 		if (storedVisitorId && storedPassword) {
-			console.log("Found stored visitor credentials. Attempting login...");
-
 			try {
 				// Attempt login with stored credentials
 				await this.login({ username: storedVisitorId, password: storedPassword });
-				console.log(`Logged in using stored credentials for ID: ${storedVisitorId}`);
 				return;
 			} catch (error) {
-				console.error("Login with stored credentials failed:", error);
-				// Clear invalid stored credentials
+				// Clear invalid stored credentials and fall through to re-registration
 				this.storage.removeItem("visitorId");
 				this.storage.removeItem("visitorPassword");
 			}
@@ -183,8 +178,6 @@ export class PotoClient {
 		// Store the visitor credentials in storage
 		this.storage.setItem(VISITOR_ID, data.userId);
 		this.storage.setItem(PASSWORD, data.pw || "");
-
-		console.log(`Logged in as visitor with ID: ${this.userId}`);
 	}
 
 	/**

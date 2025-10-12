@@ -1,7 +1,11 @@
-import { describe, it, expect, beforeEach, mock } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { ChatClient } from "../../../genericChatCli/client/ChatClient";
 import { ChatConfigManager } from "../../../genericChatCli/client/ChatConfig";
 import { MarkdownParser } from "../../../genericChatCli/client/MarkdownParser";
+
+// Increase max listeners for stdin/stdout to prevent warnings in tests
+process.stdin.setMaxListeners(50);
+process.stdout.setMaxListeners(50);
 
 describe("ChatClient Markdown Integration", () => {
     let chatClient: ChatClient;
@@ -16,6 +20,16 @@ describe("ChatClient Markdown Integration", () => {
         
         // Create ChatClient instance
         chatClient = new ChatClient(mockServerUrl);
+    });
+
+    afterEach(() => {
+        // Clean up readline interface to prevent memory leak warnings
+        if (chatClient && (chatClient as any).rl) {
+            const rl = (chatClient as any).rl;
+            // Remove all listeners before closing to prevent exit handlers from running
+            rl.removeAllListeners();
+            rl.close();
+        }
     });
 
     describe("Markdown Splitter Integration", () => {

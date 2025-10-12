@@ -1,12 +1,16 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { PotoClient } from "../../../src/web/rpc/PotoClient";
 
 describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
     let client: PotoClient;
     let mockStorage: any;
     let capturedRequests: Array<{ method: string; url: string; body?: any }> = [];
+    let originalFetch: typeof global.fetch;
 
     beforeEach(() => {
+        // Save the original fetch function
+        originalFetch = global.fetch;
+        
         // Reset captured requests
         capturedRequests = [];
         
@@ -42,6 +46,11 @@ describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
                 headers: { 'Content-Type': 'application/json' }
             });
         };
+    });
+
+    afterEach(() => {
+        // Restore the original fetch function to prevent interference with other tests
+        global.fetch = originalFetch;
     });
 
     test("should use GET method for methods starting with 'get' when no arguments", async () => {
@@ -245,8 +254,12 @@ describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
 describe("PotoClient _hasBlob Performance Tests", () => {
     let client: PotoClient;
     let mockStorage: any;
+    let originalFetch: typeof global.fetch;
 
     beforeEach(() => {
+        // Save the original fetch function
+        originalFetch = global.fetch;
+        
         // Create mock storage
         mockStorage = {
             data: new Map<string, string>(),
@@ -270,6 +283,11 @@ describe("PotoClient _hasBlob Performance Tests", () => {
                 headers: { 'Content-Type': 'application/json' }
             });
         };
+    });
+
+    afterEach(() => {
+        // Restore the original fetch function to prevent interference with other tests
+        global.fetch = originalFetch;
     });
 
     test("should NOT iterate through TypedArray elements when checking for Blobs (OPTIMIZATION)", async () => {

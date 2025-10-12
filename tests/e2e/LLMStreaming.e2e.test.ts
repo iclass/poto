@@ -6,13 +6,19 @@ import { PotoClient } from "../../src/web/rpc/PotoClient";
 import { ContextIsolationTestModule } from "./ContextIsolationTestModule";
 import { TestGeneratorModule } from "./TestGeneratorModule";
 
+// Helper to generate random port in safe range
+function getRandomPort(): number {
+    // Use range 30000-60000 to avoid well-known and registered ports
+    return Math.floor(Math.random() * 30000) + 30000;
+}
+
 describe("Mock LLM Streaming Tests", () => {
     // Increase timeout for CI environment
     const timeout = process.env.CI ? 30000 : 10000; // 30s in CI, 10s locally
     let server: PotoServer;
     let client: PotoClient;
     let serverUrl: string;
-    const testPort = process.env.CI ? 0 : 3161; // Use random port in CI, fixed port locally
+    const testPort = getRandomPort(); // Use random port to avoid conflicts
 
     function makeProxy(theClient: PotoClient) {
         return theClient.getProxy<TestGeneratorModule>(TestGeneratorModule.name);
@@ -25,8 +31,6 @@ describe("Mock LLM Streaming Tests", () => {
 
 
     beforeAll(async () => {
-        console.log(`Starting server on port ${testPort} (CI: ${process.env.CI})`);
-
         // Create and start the server
         server = new PotoServer({
             port: testPort,
@@ -53,17 +57,13 @@ describe("Mock LLM Streaming Tests", () => {
         // Start the server using the run() method
         server.run();
 
-        // Get the actual port (in case we used 0 for random port)
-        const actualPort = server.server?.port || testPort;
-        serverUrl = `http://localhost:${actualPort}`;
-        console.log(`Server URL: ${serverUrl}`);
+        // Use the assigned test port
+        serverUrl = `http://localhost:${testPort}`;
 
         // Wait for server to start with retry logic
         let retries = 0;
         const maxRetries = process.env.CI ? 20 : 10; // More retries in CI
         const retryDelay = process.env.CI ? 500 : 200; // Longer delay in CI
-
-        console.log(`Waiting for server to start (max ${maxRetries} attempts, ${retryDelay}ms delay)`);
 
         while (retries < maxRetries) {
             try {
@@ -74,15 +74,11 @@ describe("Mock LLM Streaming Tests", () => {
                 });
 
                 if (response.ok || response.status === 404) { // 404 is fine, means server is running
-                    console.log(`Server started successfully on ${serverUrl} after ${retries + 1} attempts`);
                     break;
                 }
             } catch (error) {
-                console.log(`Attempt ${retries + 1}/${maxRetries} failed: ${error}`);
                 // Server not ready yet, continue waiting
                 if (retries === maxRetries - 1) {
-                    console.error(`Server failed to start after ${maxRetries} attempts`);
-                    console.error(`Final error: ${error}`);
                     throw new Error(`Server failed to start after ${maxRetries} attempts: ${error}`);
                 }
             }
@@ -98,23 +94,24 @@ describe("Mock LLM Streaming Tests", () => {
             removeItem: (key: string): void => { }
         };
         client = new PotoClient(serverUrl, mockStorage);
-        console.log("Client created successfully");
     });
 
     afterAll(async () => {
-        // Clean up - Bun's serve() doesn't have a stop method, so we just let it run
-        // The server will be terminated when the test process ends
+        // Clean up server to prevent port conflicts and resource leaks
+        if (server?.server) {
+            server.server.stop();
+        }
     });
 
     beforeEach(async () => {
         // Add small delay to prevent test interference
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await new Promise(resolve => setTimeout(resolve, 50));
 
         // Login as visitor for each test
         try {
             await client.loginAsVisitor();
         } catch (error) {
-            console.warn("Login failed, continuing without auth:", error);
+            // Login failed, continuing without auth
         }
     });
 
@@ -282,7 +279,6 @@ describe("Mock LLM Streaming Tests", () => {
                     await Promise.race([processStream(), timeout]);
                 } catch (error) {
                     // If timeout occurs, we still want to return what we got
-                    console.warn(`LLM stream ${index + 1} timed out:`, error);
                 }
 
                 return { chunks, content };
