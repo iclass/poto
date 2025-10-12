@@ -24,7 +24,7 @@
 ```bash
 
 # 安装特定版本
-bun add https://github.com/iclass/poto/releases/download/v1.0.13/poto.tar.gz     
+bun add https://github.com/iclass/poto/releases/download/v1.1.0/poto.tar.gz     
 
 ```
 
