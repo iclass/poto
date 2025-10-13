@@ -309,9 +309,10 @@ describe("PotoClient _hasBlob Performance Tests", () => {
 
         const totalTime = endTime - startTime;
         
-        // With the optimization, this should complete quickly (< 500ms)
-        // Without optimization, checking 2M elements would take 1000ms+
-        expect(totalTime).toBeLessThan(1000); // Generous for CI, should be ~100ms locally
+        // With the optimization, this should complete very quickly (~2-5ms)
+        // The _hasBlob check now skips TypedArray elements (no iteration)
+        // Base64 encoding uses native Buffer.toString() in Bun/Node (~0.7ms for 2MB)
+        expect(totalTime).toBeLessThan(50); // Should be ~2-5ms, 50ms generous for CI
     });
 
     test("should still detect actual Blobs in nested structures", async () => {
@@ -360,8 +361,9 @@ describe("PotoClient _hasBlob Performance Tests", () => {
 
         const totalTime = endTime - startTime;
         
-        // Should complete quickly even with multiple large arrays
-        expect(totalTime).toBeLessThan(1000);
+        // Should complete very quickly even with multiple large arrays (1.5MB total)
+        // Each array uses native Buffer encoding (~0.1-0.2ms each)
+        expect(totalTime).toBeLessThan(50); // Should be ~1-2ms, 50ms generous for CI
     });
 
     test("should skip ArrayBuffer when checking for Blobs", async () => {

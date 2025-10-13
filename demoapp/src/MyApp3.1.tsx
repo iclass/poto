@@ -2,15 +2,18 @@ import { PotoClient } from "poto";
 import { Constants, ServerInfo, GenData, ImageSize } from "./demoConsts";
 import type { DemoModule } from "./DemoModule";
 import { makeState } from "./ReactiveState";
-import { MSEAudioPlayer } from "./MSEAudioPlayer";
 
-// Store MSE player at module level to persist across renders
-let msePlayer: MSEAudioPlayer | undefined;
+
 
 export function MyApp3({
     host = 'http://localhost' as string, port = Constants.port as number
 }) {
     const SessionData = "stored in seesion";
+
+    // Store Web Audio API objects outside reactive state to avoid proxy issues
+    let webAudioContext: AudioContext | undefined;
+    let webAudioSource: AudioBufferSourceNode | undefined;
+    let webAudioBuffer: AudioBuffer | undefined;
 
     // Clean API - Pure TypeScript initialization with lazy initialization!
     const $ = makeState(() => {
@@ -40,9 +43,11 @@ export function MyApp3({
                     fileUrl: undefined as string | undefined,
                     audioUrl: undefined as string | undefined,
                     arrayBufferUrl: undefined as string | undefined,
-                    arrayBufferTime: undefined as number | undefined,
                     fileTime: undefined as number | undefined,
                     fileSize: undefined as number | undefined,
+                    arrayBufferTime: undefined as number | undefined,
+                    audioTime: undefined as number | undefined,
+                    audioSize: undefined as number | undefined,
                 },
                 messageInput: 'Hello from the frontend!',
                 selectedFile: null as File | null,
@@ -50,6 +55,8 @@ export function MyApp3({
                 webAudio: {
                     isPlaying: false,
                     isPaused: false,
+                    downloadTime: undefined as number | undefined,
+                    fileSize: undefined as number | undefined,
                     duration: undefined as number | undefined,
                     sampleRate: undefined as number | undefined,
                     channels: undefined as number | undefined,
@@ -246,8 +253,8 @@ export function MyApp3({
                 error: undefined
             };
         } catch (error) {
-            console.error('Failed to get image size:', error);
-            $.results.error = `Failed to get image size: ${error}`;
+            console.error('Failed to get image size file:', error);
+            $.results.error = `Failed to get image size file: ${error}`;
         } finally {
             $.loading = false;
         }
@@ -270,20 +277,32 @@ export function MyApp3({
     };
 
     const clearResults = () => {
-        // Clean up URLs to prevent memory leaks
+        // Clean up image URLs to prevent memory leaks
         if ($.downloadResults.fileUrl) {
             URL.revokeObjectURL($.downloadResults.fileUrl);
+        }
+        if ($.downloadResults.arrayBufferUrl) {
+            URL.revokeObjectURL($.downloadResults.arrayBufferUrl);
         }
         if ($.downloadResults.audioUrl) {
             URL.revokeObjectURL($.downloadResults.audioUrl);
         }
         
-        // Clean up MSE player
-        if (msePlayer) {
-            msePlayer.cleanup();
-            msePlayer = undefined;
+        // Clean up Web Audio API resources
+        if (webAudioSource) {
+            try {
+                webAudioSource.stop();
+                webAudioSource.disconnect();
+            } catch (e) {
+                // Source might already be stopped
+            }
+            webAudioSource = undefined;
         }
-        
+        if (webAudioContext) {
+            webAudioContext.close();
+            webAudioContext = undefined;
+        }
+        webAudioBuffer = undefined;
         
         $.results = {
             greeting: undefined,
@@ -300,20 +319,28 @@ export function MyApp3({
             fileUrl: undefined,
             audioUrl: undefined,
             arrayBufferUrl: undefined,
-            arrayBufferTime: undefined,
             fileTime: undefined,
             fileSize: undefined,
+            arrayBufferTime: undefined,
+            audioTime: undefined,
+            audioSize: undefined,
         };
         
         $.webAudio = {
             isPlaying: false,
             isPaused: false,
+            downloadTime: undefined,
+            fileSize: undefined,
             duration: undefined,
             sampleRate: undefined,
             channels: undefined,
             startTime: 0,
             pauseTime: 0,
         };
+        
+        webAudioContext = undefined;
+        webAudioSource = undefined;
+        webAudioBuffer = undefined;
     };
 
     const downloadAsFile = async () => {
@@ -321,18 +348,36 @@ export function MyApp3({
         
         $.loading = true;
         try {
+            console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('🔵 CLIENT: File/Blob Download - Decoding Strategy');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            
             const startTime = performance.now();
             const file = await $.demoModule.downloadImageAsFile();
             const downloadTime = performance.now() - startTime;
             
+            // Create object URL for display
             const fileUrl = URL.createObjectURL(file);
             
             $.downloadResults.fileUrl = fileUrl;
             $.downloadResults.fileTime = downloadTime;
             $.downloadResults.fileSize = file.size;
             $.results.error = undefined;
+            
+            console.log('\n📥 CLIENT DECODING STRATEGY (Blob):');
+            console.log('  1️⃣ Server sends: { __blob: { data: base64, type, size, name, lastModified } }');
+            console.log('  2️⃣ TypedJSON.parse() detects __blob marker');
+            console.log('  3️⃣ Native atob() decodes base64 → binary string (FAST!)');
+            console.log('  4️⃣ Binary string → Uint8Array → new Blob()');
+            console.log('  5️⃣ Result: Full Blob/File object reconstructed with metadata');
+            
+            console.log(`\n⏱️ downloadAsFile (File) Performance:`);
+            console.log(`  - File size: ${(file.size / (1024 * 1024)).toFixed(2)} MB (${file.size.toLocaleString()} bytes)`);
+            console.log(`  - Download time: ${downloadTime.toFixed(2)}ms`);
+            console.log(`  - Throughput: ${(file.size / 1024 / 1024 / (downloadTime / 1000)).toFixed(2)} MB/s`);
+            console.log(`  - File type: ${file.type}`);
         } catch (error) {
-            console.error('Download as File failed:', error);
+            console.error('❌ Download as File failed:', error);
             $.results.error = `Download as File failed: ${error}`;
         } finally {
             $.loading = false;
@@ -344,6 +389,9 @@ export function MyApp3({
         
         $.loading = true;
         try {
+            console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('🔵 CLIENT: ArrayBuffer Download - Decoding Strategy');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             
             const startTime = performance.now();
             const arrayBuffer = await $.demoModule.downloadImageAsArrayBuffer();
@@ -358,6 +406,18 @@ export function MyApp3({
             $.downloadResults.fileSize = arrayBuffer.byteLength;
             $.results.error = undefined;
             
+            console.log('\n📥 CLIENT DECODING STRATEGY (ArrayBuffer):');
+            console.log('  1️⃣ Server sends: { __arraybuffer: base64String }');
+            console.log('  2️⃣ TypedJSON.parse() detects __arraybuffer marker');
+            console.log('  3️⃣ Native atob() decodes base64 → binary string (FAST!)');
+            console.log('  4️⃣ Binary string → Uint8Array → ArrayBuffer extracted');
+            console.log('  5️⃣ Result: Pure ArrayBuffer (no metadata)');
+            
+            console.log(`\n⏱️ downloadAsArrayBuffer (ArrayBuffer) Performance:`);
+            console.log(`  - File size: ${(arrayBuffer.byteLength / (1024 * 1024)).toFixed(2)} MB (${arrayBuffer.byteLength.toLocaleString()} bytes)`);
+            console.log(`  - Download time: ${downloadTime.toFixed(2)}ms`);
+            console.log(`  - Throughput: ${(arrayBuffer.byteLength / 1024 / 1024 / (downloadTime / 1000)).toFixed(2)} MB/s`);
+            console.log(`  - Data type: ArrayBuffer`);
         } catch (error) {
             console.error('❌ Download as ArrayBuffer failed:', error);
             $.results.error = `Download as ArrayBuffer failed: ${error}`;
@@ -366,29 +426,43 @@ export function MyApp3({
         }
     };
 
-
-
     const downloadAudio = async () => {
         if (!$.demoModule) return;
         
-        // Clean up MSE player
-        if (msePlayer) {
-            msePlayer.cleanup();
-            msePlayer = undefined;
-        }
-        
-        $.webAudio.isPlaying = false;
-        $.webAudio.isPaused = false;
-        
         $.loading = true;
         try {
+            console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('🔵 CLIENT: Audio File Download - Decoding Strategy');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            
+            const startTime = performance.now();
             const audioBlob = await $.demoModule.downloadAudioFile();
+            const downloadTime = performance.now() - startTime;
+            
+            // Create object URL for audio playback
             const audioUrl = URL.createObjectURL(audioBlob);
             
             $.downloadResults.audioUrl = audioUrl;
+            $.downloadResults.audioTime = downloadTime;
+            $.downloadResults.audioSize = audioBlob.size;
             $.results.error = undefined;
+            
+            console.log('\n📥 CLIENT DECODING STRATEGY (Audio Blob):');
+            console.log('  1️⃣ Server sends: { __blob: { data: base64, type, size, name, lastModified } }');
+            console.log('  2️⃣ TypedJSON.parse() detects __blob marker');
+            console.log('  3️⃣ Native atob() decodes base64 → binary string (FAST!)');
+            console.log('  4️⃣ Binary string → Uint8Array → new Blob()');
+            console.log('  5️⃣ Result: Full Blob object reconstructed with metadata');
+            console.log(`  🎵 Audio ready for playback${$.autoPlayAudio ? ' - auto-playing!' : '!'}`);
+            
+            console.log(`\n⏱️ downloadAudio (Audio Blob) Performance:`);
+            console.log(`  - File size: ${(audioBlob.size / (1024 * 1024)).toFixed(2)} MB (${audioBlob.size.toLocaleString()} bytes)`);
+            console.log(`  - Download time: ${downloadTime.toFixed(2)}ms`);
+            console.log(`  - Throughput: ${(audioBlob.size / 1024 / 1024 / (downloadTime / 1000)).toFixed(2)} MB/s`);
+            console.log(`  - Audio type: ${audioBlob.type}`);
+            console.log(`  - 🎶 Auto-play: ${$.autoPlayAudio ? 'enabled' : 'disabled'}`);
         } catch (error) {
-            console.error('Download audio failed:', error);
+            console.error('❌ Download audio failed:', error);
             $.results.error = `Download audio failed: ${error}`;
         } finally {
             $.loading = false;
@@ -402,95 +476,190 @@ export function MyApp3({
     const downloadAndPlayWithWebAudio = async () => {
         if (!$.demoModule) return;
         
-        // Stop HTML5 audio player if it's playing
-        const audioElement = document.querySelector('audio');
-        if (audioElement) {
-            audioElement.pause();
-            audioElement.currentTime = 0;
-        }
-        
-        // Clean up MSE player
-        if (msePlayer) {
-            msePlayer.cleanup();
-        }
-        
-        
         $.loading = true;
         try {
+            console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('🔵 CLIENT: Web Audio API - Download & Decode Strategy');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            
+            const startTime = performance.now();
             const audioBlob = await $.demoModule.downloadAudioFile();
+            const downloadTime = performance.now() - startTime;
             
-            // Create and use MSE player for low-latency streaming
-            msePlayer = new MSEAudioPlayer();
+            console.log('\n📥 CLIENT DECODING STRATEGY (Web Audio API):');
+            console.log('  1️⃣ Download: TypedJSON → Blob (same as before)');
+            console.log('  2️⃣ Blob → ArrayBuffer: await blob.arrayBuffer()');
+            console.log('  3️⃣ Create AudioContext: new AudioContext()');
+            console.log('  4️⃣ Decode audio: await audioContext.decodeAudioData(arrayBuffer)');
+            console.log('  5️⃣ Result: AudioBuffer ready for Web Audio API playback!');
+            console.log('  🎵 Full programmatic control over audio!');
             
-            await msePlayer.loadAndPlay(
-                audioBlob,
-                // On playback start
-                () => {
-                    $.webAudio.isPlaying = true;
-                    $.webAudio.isPaused = false;
-                    $.loading = false;
-                },
-                // On metadata loaded
-                (duration) => {
-                    $.webAudio.duration = duration;
-                    $.webAudio.sampleRate = 48000; // MP3 typical
-                    $.webAudio.channels = 2; // Stereo typical
-                },
-                // On ended
-                () => {
-                    $.webAudio.isPlaying = false;
-                    $.webAudio.isPaused = false;
-                }
-            );
+            // Convert Blob to ArrayBuffer
+            const arrayBuffer = await audioBlob.arrayBuffer();
             
+            // Create or reuse AudioContext (stored outside reactive state)
+            if (!webAudioContext || webAudioContext.state === 'closed') {
+                webAudioContext = new AudioContext();
+                console.log('🎵 DEBUG: Created new AudioContext');
+                console.log('🎵 DEBUG: Type:', typeof webAudioContext);
+                console.log('🎵 DEBUG: Constructor:', webAudioContext.constructor.name);
+                console.log('🎵 DEBUG: instanceof AudioContext:', webAudioContext instanceof AudioContext);
+                console.log('🎵 DEBUG: Has suspend method:', typeof webAudioContext.suspend === 'function');
+            }
+            
+            // Decode audio data
+            webAudioBuffer = await webAudioContext.decodeAudioData(arrayBuffer);
+            
+            $.webAudio.downloadTime = downloadTime;
+            $.webAudio.fileSize = audioBlob.size;
+            $.webAudio.duration = webAudioBuffer.duration;
+            $.webAudio.sampleRate = webAudioBuffer.sampleRate;
+            $.webAudio.channels = webAudioBuffer.numberOfChannels;
             $.results.error = undefined;
+            
+            console.log(`\n⏱️ Web Audio API Performance:`);
+            console.log(`  - File size: ${(audioBlob.size / (1024 * 1024)).toFixed(2)} MB (${audioBlob.size.toLocaleString()} bytes)`);
+            console.log(`  - Download time: ${downloadTime.toFixed(2)}ms`);
+            console.log(`  - Throughput: ${(audioBlob.size / 1024 / 1024 / (downloadTime / 1000)).toFixed(2)} MB/s`);
+            console.log(`  - Audio duration: ${webAudioBuffer.duration.toFixed(2)}s`);
+            console.log(`  - Sample rate: ${webAudioBuffer.sampleRate}Hz`);
+            console.log(`  - Channels: ${webAudioBuffer.numberOfChannels}`);
+            console.log(`  - 🎵 Auto-playing immediately!`);
+            
+            // Auto-play immediately after setup
+            webAudioSource = webAudioContext.createBufferSource();
+            webAudioSource.buffer = webAudioBuffer;
+            webAudioSource.connect(webAudioContext.destination);
+            webAudioSource.start(0);
+            
+            $.webAudio.isPlaying = true;
+            $.webAudio.isPaused = false;
+            $.webAudio.startTime = webAudioContext.currentTime;
+            
+            // Handle end of playback
+            webAudioSource.onended = () => {
+                $.webAudio.isPlaying = false;
+                $.webAudio.isPaused = false;
+                $.webAudio.pauseTime = 0;
+            };
+            
+            console.log('▶️ Web Audio API: Auto-playing');
         } catch (error) {
-            console.error('❌ MSE streaming failed:', error);
-            $.results.error = `MSE streaming failed: ${error}`;
+            console.error('❌ Web Audio API setup failed:', error);
+            $.results.error = `Web Audio API setup failed: ${error}`;
+        } finally {
             $.loading = false;
         }
     };
 
     const playWebAudio = async () => {
-        if (!msePlayer) return;
+        if (!webAudioBuffer || !webAudioContext) return;
         
-        if ($.webAudio.isPaused) {
-            // Resume from pause
-            msePlayer.play();
+        try {
+            // If paused, just resume the audio context
+            if ($.webAudio.isPaused && webAudioContext.state === 'suspended') {
+                console.log('▶️ Resuming AudioContext, state:', webAudioContext.state);
+                await webAudioContext.resume();
+                $.webAudio.isPlaying = true;
+                $.webAudio.isPaused = false;
+                console.log('▶️ Web Audio API: Resumed');
+                return;
+            }
+            
+            // Stop any existing source
+            if (webAudioSource) {
+                try {
+                    webAudioSource.stop();
+                    webAudioSource.disconnect();
+                } catch (e) {
+                    // Already stopped
+                }
+            }
+            
+            // Create new source
+            webAudioSource = webAudioContext.createBufferSource();
+            webAudioSource.buffer = webAudioBuffer;
+            webAudioSource.connect(webAudioContext.destination);
+            
+            // Start playback from beginning
+            webAudioSource.start(0);
+            
             $.webAudio.isPlaying = true;
             $.webAudio.isPaused = false;
-        } else {
-            // Restart from beginning
-            msePlayer.restart();
-            $.webAudio.isPlaying = true;
-            $.webAudio.isPaused = false;
+            $.webAudio.startTime = webAudioContext.currentTime;
+            
+            // Handle end of playback
+            webAudioSource.onended = () => {
+                if ($.webAudio.isPlaying) {
+                    $.webAudio.isPlaying = false;
+                    $.webAudio.isPaused = false;
+                    console.log('🎵 Playback ended naturally');
+                }
+            };
+            
+            console.log('▶️ Web Audio API: Playing from start');
+        } catch (error) {
+            console.error('❌ Web Audio playback failed:', error);
+            $.results.error = `Web Audio playback failed: ${error}`;
         }
     };
 
     const pauseWebAudio = async () => {
-        if (!$.webAudio.isPlaying || !msePlayer) return;
+        if (!$.webAudio.isPlaying || !webAudioContext) return;
         
         try {
-            msePlayer.pause();
+            console.log('⏸️ DEBUG: Attempting to pause');
+            console.log('⏸️ DEBUG: webAudioContext exists?', !!webAudioContext);
+            console.log('⏸️ DEBUG: webAudioContext type:', typeof webAudioContext);
+            console.log('⏸️ DEBUG: webAudioContext constructor:', webAudioContext?.constructor?.name);
+            console.log('⏸️ DEBUG: webAudioContext instanceof AudioContext:', webAudioContext instanceof AudioContext);
+            console.log('⏸️ DEBUG: webAudioContext.state:', webAudioContext.state);
+            console.log('⏸️ DEBUG: webAudioContext.suspend is function?', typeof webAudioContext.suspend === 'function');
+            console.log('⏸️ DEBUG: AudioContext available?', typeof AudioContext !== 'undefined');
+            
+            // Use audioContext.suspend() - the proper way to pause
+            await webAudioContext.suspend();
+            
             $.webAudio.isPlaying = false;
             $.webAudio.isPaused = true;
+            
+            console.log('✅ Web Audio API: Successfully paused (context suspended)');
         } catch (error: any) {
-            console.error('❌ Pause failed:', error);
-            $.results.error = `Pause failed: ${error}`;
+            console.error('❌ Web Audio pause failed:', error);
+            console.error('❌ Error details:', {
+                message: error?.message,
+                stack: error?.stack,
+                audioContextState: webAudioContext?.state
+            });
+            $.results.error = `Web Audio pause failed: ${error}`;
         }
     };
 
     const stopWebAudio = () => {
-        if (!msePlayer) return;
+        if (!webAudioSource || !webAudioContext) return;
         
         try {
-            msePlayer.stop();
+            // Resume context if suspended, then stop
+            if (webAudioContext.state === 'suspended') {
+                webAudioContext.resume();
+            }
+            
+            // Stop the source
+            try {
+                webAudioSource.stop();
+                webAudioSource.disconnect();
+            } catch (stopError) {
+                // Source already stopped - OK
+            }
+            
             $.webAudio.isPlaying = false;
             $.webAudio.isPaused = false;
             $.webAudio.pauseTime = 0;
             $.webAudio.startTime = 0;
+            
+            console.log('⏹️ Web Audio API: Stopped');
         } catch (error) {
-            console.error('❌ Stop failed:', error);
+            console.error('❌ Web Audio stop failed:', error);
             // Reset state on error
             $.webAudio.isPlaying = false;
             $.webAudio.isPaused = false;
@@ -775,13 +944,14 @@ export function MyApp3({
             </div>
 
             <div className="demo-section">
-                <h3>🎵 Audio Download & Playback (HTML5)</h3>
+                <h3>🎵 Audio Download & Playback</h3>
+                <p><small>Download and play Caliente.mp3 from server</small></p>
                 <div className="button-group" style={{alignItems: 'center', gap: '10px'}}>
                     <button
                         onClick={downloadAudio}
                         disabled={$.loading || !$.isConnected || !$.currentUser}
                     >
-                        Download Audio
+                        Download Audio File
                     </button>
                     <label style={{display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer'}}>
                         <input
@@ -794,26 +964,40 @@ export function MyApp3({
                     </label>
                 </div>
 
+                {$.downloadResults.audioTime && (
+                    <div className="result">
+                        <h4>📊 Audio Download Performance:</h4>
+                        <p>• File size: {(($.downloadResults.audioSize || 0) / (1024 * 1024)).toFixed(2)} MB ({($.downloadResults.audioSize || 0).toLocaleString()} bytes)</p>
+                        <p>• Download time: {$.downloadResults.audioTime.toFixed(2)} ms</p>
+                        <p>• Throughput: {((($.downloadResults.audioSize || 0) / 1024 / 1024) / ($.downloadResults.audioTime / 1000)).toFixed(2)} MB/s</p>
+                    </div>
+                )}
+
                 {$.downloadResults.audioUrl && (
                     <div className="result">
+                        <h4>🎧 Audio Player:</h4>
                         <audio 
                             controls 
                             autoPlay={$.autoPlayAudio}
                             src={$.downloadResults.audioUrl}
-                            style={{width: '100%'}}
+                            style={{width: '100%', marginTop: '10px'}}
                         />
+                        <p style={{marginTop: '10px'}}>
+                            <small>{$.autoPlayAudio ? '🎶 Audio auto-playing!' : '▶️ Click play to start audio.'} Use controls to pause/adjust volume.</small>
+                        </p>
                     </div>
                 )}
             </div>
 
             <div className="demo-section">
                 <h3>🎛️ Web Audio API Playback</h3>
+                <p><small>Download and play using Web Audio API (no HTML5 player)</small></p>
                 <div className="button-group">
                     <button
                         onClick={downloadAndPlayWithWebAudio}
                         disabled={$.loading || !$.isConnected || !$.currentUser}
                     >
-                        Download and Play
+                        Download & Setup Web Audio
                     </button>
                     <button
                         onClick={playWebAudio}
@@ -835,14 +1019,34 @@ export function MyApp3({
                     </button>
                 </div>
 
+                {$.webAudio.downloadTime && (
+                    <div className="result">
+                        <h4>📊 Web Audio API Performance:</h4>
+                        <p>• File size: {(($.webAudio.fileSize || 0) / (1024 * 1024)).toFixed(2)} MB ({($.webAudio.fileSize || 0).toLocaleString()} bytes)</p>
+                        <p>• Download time: {$.webAudio.downloadTime.toFixed(2)} ms</p>
+                        <p>• Throughput: {((($.webAudio.fileSize || 0) / 1024 / 1024) / ($.webAudio.downloadTime / 1000)).toFixed(2)} MB/s</p>
+                        {$.webAudio.duration && (
+                            <>
+                                <p>• Duration: {$.webAudio.duration.toFixed(2)} seconds</p>
+                                <p>• Sample rate: {$.webAudio.sampleRate}Hz</p>
+                                <p>• Channels: {$.webAudio.channels}</p>
+                            </>
+                        )}
+                    </div>
+                )}
+
                 {$.webAudio.duration && (
                     <div className="result">
-                        <p><strong>Duration:</strong> {$.webAudio.duration.toFixed(2)}s | <strong>State:</strong> {
-                            $.webAudio.isPlaying ? '▶️ Playing' :
-                            $.webAudio.isPaused ? '⏸️ Paused' :
-                            '⏹️ Stopped'
-                        }</p>
-                        <p><small>Sample rate: {$.webAudio.sampleRate}Hz | Channels: {$.webAudio.channels}</small></p>
+                        <h4>🎛️ Web Audio API Status:</h4>
+                        <p>
+                            <strong>State:</strong> {
+                                $.webAudio.isPlaying ? '▶️ Playing' :
+                                $.webAudio.isPaused ? '⏸️ Paused' :
+                                '⏹️ Stopped'
+                            }
+                        </p>
+                        <p><small>✨ Full programmatic control! No HTML5 audio element used.</small></p>
+                        <p><small>💡 Web Audio API provides low-level audio processing capabilities.</small></p>
                     </div>
                 )}
             </div>

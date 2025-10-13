@@ -657,11 +657,20 @@ export class PotoClient {
 		// Always use async for Blobs
 		if (obj instanceof Blob) return true;
 		
-		// In browsers with FileReader, use async for binary data to leverage native encoding
-		// This provides ~40-50% faster base64 encoding compared to JavaScript
-		if (typeof FileReader !== 'undefined') {
-			if (obj instanceof ArrayBuffer) return true;
-			if (ArrayBuffer.isView(obj)) return true;
+		// 🚀 CRITICAL: Check for ArrayBuffer and TypedArrays BEFORE checking generic objects
+		// Otherwise Object.values() will iterate through millions of array elements!
+		if (obj instanceof ArrayBuffer) {
+			// In browsers with FileReader, use async for native encoding
+			return typeof FileReader !== 'undefined';
+		}
+		if (ArrayBuffer.isView(obj)) {
+			// In browsers with FileReader, use async for native encoding  
+			return typeof FileReader !== 'undefined';
+		}
+		
+		// Skip known non-binary types BEFORE recursion
+		if (obj instanceof Date || obj instanceof RegExp || obj instanceof Map || obj instanceof Set) {
+			return false;
 		}
 		
 		if (Array.isArray(obj)) {
@@ -669,10 +678,6 @@ export class PotoClient {
 		}
 		
 		if (obj && typeof obj === 'object') {
-			// Also skip Date, RegExp, Map, Set - they don't contain binary data
-			if (obj instanceof Date || obj instanceof RegExp || obj instanceof Map || obj instanceof Set) {
-				return false;
-			}
 			return Object.values(obj).some(value => this._hasBlob(value, depth + 1, maxDepth));
 		}
 		

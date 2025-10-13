@@ -1137,27 +1137,35 @@ export class TypedJSON {
    * @returns Serialized TypedArray with type and offset information
    */
   private static _serializeTypedArray(typedArray: ArrayBufferView): SerializedTypedArray {
-    console.warn('🐌 TypedJSON._serializeTypedArray() called - using SLOW JavaScript encoding!');
     // Warn about non-zero offset TypedArrays that may lose context
     if (typedArray.byteOffset !== 0) {
       console.warn('Non-zero offset TypedArrays may lose context during serialization');
     }
     
-    const buffer = typedArray.buffer.slice(typedArray.byteOffset, typedArray.byteOffset + typedArray.byteLength);
-    // Ensure we have an ArrayBuffer, not SharedArrayBuffer
-    const arrayBuffer = buffer instanceof ArrayBuffer ? buffer : new ArrayBuffer(buffer.byteLength);
-    if (!(buffer instanceof ArrayBuffer)) {
-      // Copy data from SharedArrayBuffer to ArrayBuffer
-      new Uint8Array(arrayBuffer).set(new Uint8Array(buffer));
+    // 🚀 OPTIMIZATION: In Bun/Node, avoid expensive buffer copying by passing TypedArray directly
+    let base64: string;
+    if (this.isBunOrNode && typeof Buffer !== 'undefined') {
+      // Convert TypedArray directly to Buffer without copying
+      // Buffer.from() with ArrayBuffer view is efficient and handles offset/length automatically
+      const uint8View = new Uint8Array(typedArray.buffer, typedArray.byteOffset, typedArray.byteLength);
+      base64 = Buffer.from(uint8View).toString('base64');
+    } else {
+      // Browser path: Need to slice to handle offset correctly
+      const buffer = typedArray.buffer.slice(typedArray.byteOffset, typedArray.byteOffset + typedArray.byteLength);
+      // Ensure we have an ArrayBuffer, not SharedArrayBuffer
+      const arrayBuffer = buffer instanceof ArrayBuffer ? buffer : new ArrayBuffer(buffer.byteLength);
+      if (!(buffer instanceof ArrayBuffer)) {
+        // Copy data from SharedArrayBuffer to ArrayBuffer
+        new Uint8Array(arrayBuffer).set(new Uint8Array(buffer));
+      }
+      base64 = this._arrayBufferToBase64(arrayBuffer);
     }
-    
-    const base64 = this._arrayBufferToBase64(arrayBuffer);
     
     return {
       [this.TYPE_MARKERS.TYPED_ARRAY]: {
         data: base64,
         constructor: typedArray.constructor.name,
-        byteOffset: 0, // Always 0 since we sliced the buffer to start fresh
+        byteOffset: 0, // Always 0 since we handle offset in serialization
         byteLength: typedArray.byteLength
       }
     };
@@ -1179,21 +1187,29 @@ export class TypedJSON {
       console.warn('Non-zero offset TypedArrays may lose context during serialization');
     }
     
-    const buffer = typedArray.buffer.slice(typedArray.byteOffset, typedArray.byteOffset + typedArray.byteLength);
-    // Ensure we have an ArrayBuffer, not SharedArrayBuffer
-    const arrayBuffer = buffer instanceof ArrayBuffer ? buffer : new ArrayBuffer(buffer.byteLength);
-    if (!(buffer instanceof ArrayBuffer)) {
-      // Copy data from SharedArrayBuffer to ArrayBuffer
-      new Uint8Array(arrayBuffer).set(new Uint8Array(buffer));
+    // 🚀 OPTIMIZATION: In Bun/Node, avoid expensive buffer copying by passing TypedArray directly
+    let base64: string;
+    if (this.isBunOrNode && typeof Buffer !== 'undefined') {
+      // Convert TypedArray directly to Buffer without copying
+      const uint8View = new Uint8Array(typedArray.buffer, typedArray.byteOffset, typedArray.byteLength);
+      base64 = Buffer.from(uint8View).toString('base64');
+    } else {
+      // Browser path: slice and use FileReader for async base64 encoding
+      const buffer = typedArray.buffer.slice(typedArray.byteOffset, typedArray.byteOffset + typedArray.byteLength);
+      // Ensure we have an ArrayBuffer, not SharedArrayBuffer
+      const arrayBuffer = buffer instanceof ArrayBuffer ? buffer : new ArrayBuffer(buffer.byteLength);
+      if (!(buffer instanceof ArrayBuffer)) {
+        // Copy data from SharedArrayBuffer to ArrayBuffer
+        new Uint8Array(arrayBuffer).set(new Uint8Array(buffer));
+      }
+      base64 = await this._arrayBufferToBase64Async(arrayBuffer);
     }
-    
-    const base64 = await this._arrayBufferToBase64Async(arrayBuffer);
     
     return {
       [this.TYPE_MARKERS.TYPED_ARRAY]: {
         data: base64,
         constructor: typedArray.constructor.name,
-        byteOffset: 0, // Always 0 since we sliced the buffer to start fresh
+        byteOffset: 0, // Always 0 since we handle offset in serialization
         byteLength: typedArray.byteLength
       }
     };
