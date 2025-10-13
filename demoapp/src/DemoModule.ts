@@ -1,6 +1,8 @@
 import { PotoModule, roles } from 'poto';
 import { Constants } from './demoConsts';
-import { GenData, ServerInfo, ImageSize, ImageResponseUint8, ImageResponseArrayBuffer, ImageResponseFile } from './demoConsts';
+import { GenData, ServerInfo, ImageSize } from './demoConsts';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Simple demo module with basic functionality
 export class DemoModule extends PotoModule {
@@ -78,90 +80,19 @@ export class DemoModule extends PotoModule {
         };
     }
 
-    // Method to get image size from PNG binary data (with round-trip)
-    // Echoes back EXACTLY what it receives: Uint8Array → Uint8Array
-    async getImageSize(imageData: Uint8Array): Promise<ImageResponseUint8> {
-        const startProcessing = performance.now();
-        const sizeInfo = this.calculateImageSize(imageData);
-        const processingTime = performance.now() - startProcessing;
-        
-        console.log(`⏱️ Server getImageSize received:`, {
-            type: 'Uint8Array',
-            size: `${(imageData.byteLength / 1024 / 1024).toFixed(2)} MB`,
-            processingTime: `${processingTime.toFixed(2)}ms`,
-            echoingBack: 'Uint8Array (same type)',
-            note: 'Preserving exact type through RPC round-trip'
-        });
-        
-        // Echo back the SAME type we received
-        return {
-            ...sizeInfo,
-            imageData: imageData,  // Uint8Array → Uint8Array
-            originalSize: imageData.byteLength,
-            dataType: 'Uint8Array'
-        };
+    async getImageSize(imageData: Uint8Array): Promise<ImageSize> {
+        return this.calculateImageSize(imageData);
     }
 
-    // Method to process ArrayBuffer (with round-trip)
-    // Echoes back EXACTLY what it receives: ArrayBuffer → ArrayBuffer
-    async getImageSizeArrayBuffer(imageData: ArrayBuffer): Promise<ImageResponseArrayBuffer> {
-        const startProcessing = performance.now();
+    async getImageSizeArrayBuffer(imageData: ArrayBuffer): Promise<ImageSize> {
         const uint8Array = new Uint8Array(imageData);
-        const sizeInfo = this.calculateImageSize(uint8Array);
-        const processingTime = performance.now() - startProcessing;
-        
-        console.log(`⏱️ Server getImageSizeArrayBuffer received:`, {
-            type: 'ArrayBuffer',
-            size: `${(imageData.byteLength / 1024 / 1024).toFixed(2)} MB`,
-            processingTime: `${processingTime.toFixed(2)}ms`,
-            echoingBack: 'ArrayBuffer (same type)',
-            note: 'Preserving exact type through RPC round-trip'
-        });
-        
-        // Echo back the SAME type we received
-        return {
-            ...sizeInfo,
-            imageData: imageData,  // ArrayBuffer → ArrayBuffer
-            originalSize: imageData.byteLength,
-            dataType: 'ArrayBuffer'
-        };
+        return this.calculateImageSize(uint8Array);
     }
 
-    // Method to process File (with round-trip)
-    // Echoes back EXACTLY what it receives: File → File
-    async getImageSizeFile(imageFile: File): Promise<ImageResponseFile> {
-        const startProcessing = performance.now();
-        
-        console.log(`⏱️ Server getImageSizeFile received:`, {
-            type: 'File',
-            mimeType: imageFile.type,
-            size: `${(imageFile.size / 1024 / 1024).toFixed(2)} MB`,
-            name: imageFile.name,
-            lastModified: new Date(imageFile.lastModified).toISOString(),
-            echoingBack: 'File (same type)',
-            note: 'Preserving exact type through RPC round-trip'
-        });
-        
-        // Process the file to get dimensions
+    async getImageSizeFile(imageFile: File): Promise<ImageSize> {
         const arrayBuffer = await imageFile.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
-        const sizeInfo = this.calculateImageSize(uint8Array);
-        const processingTime = performance.now() - startProcessing;
-        
-        console.log(`⏱️ Server processing time: ${processingTime.toFixed(2)}ms`);
-        
-        // Echo back the SAME type we received - recreate File with same properties
-        const returnFile = new File([arrayBuffer], imageFile.name, {
-            type: imageFile.type,
-            lastModified: imageFile.lastModified
-        });
-        
-        return {
-            ...sizeInfo,
-            imageData: returnFile,  // File → File
-            originalSize: imageFile.size,
-            dataType: 'File'
-        };
+        return this.calculateImageSize(uint8Array);
     }
 
 
@@ -214,5 +145,19 @@ export class DemoModule extends PotoModule {
         }
 
         throw new Error('IHDR chunk not found in PNG file');
+    }
+
+    async downloadImageAsFile(): Promise<Blob> {
+        return Bun.file(path.join(process.cwd(), 'public', 'logo.jpg'));
+    }
+
+    async downloadImageAsArrayBuffer(): Promise<ArrayBuffer> {
+        const imagePath = path.join(process.cwd(), 'public', 'logo.jpg');
+        const buffer = await fs.promises.readFile(imagePath);
+        return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+    }
+
+    async downloadAudioFile(): Promise<Blob> {
+        return Bun.file(path.join(process.cwd(), 'public', 'Caliente.mp3'));
     }
 }

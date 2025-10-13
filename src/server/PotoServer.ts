@@ -976,10 +976,18 @@ export async function extractArgs(httpMethod: string, pathSegments: string[], re
 		}
 	} else if (httpMethod === "post" || httpMethod === "put") {
 		try {
-			const body = req.json ? (await req.json()) : req
-			// Deserialize TypedJSON data for POST/PUT requests
-			const deserializedBody = Array.isArray(body) ? body.map(item => parseTypedJson(JSON.stringify(item))) : parseTypedJson(JSON.stringify(body));
-			params = Array.isArray(deserializedBody) ? deserializedBody : [deserializedBody];
+			// Optimized: Get raw JSON text and parse once instead of double parsing
+			// Old: req.json() → JSON.stringify() → parseTypedJson()  (2x parse + 1x stringify!)
+			// New: req.text() → parseTypedJson()  (1x parse only!)
+			const bodyText = await req.text();
+			
+			if (!bodyText) {
+				params = [];
+			} else {
+				// Parse directly from JSON string - parseTypedJson handles both regular JSON and TypedJSON
+				const deserializedBody = parseTypedJson(bodyText);
+				params = Array.isArray(deserializedBody) ? deserializedBody : [deserializedBody];
+			}
 		} catch (err) {
 			// Handle case where body is empty or invalid JSON
 			params = [];
