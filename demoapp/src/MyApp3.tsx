@@ -2,13 +2,13 @@ import { PotoClient } from "poto";
 import { Constants, ServerInfo, GenData, ImageSize } from "./demoConsts";
 import type { DemoModule } from "./DemoModule";
 import { makeState } from "./ReactiveState";
+import { MSEAudioPlayer } from "./MSEAudioPlayer";
 
 // Store Web Audio API objects at module level to persist across renders
 let webAudioContext: AudioContext | undefined;
 let webAudioSource: AudioBufferSourceNode | undefined;
 let webAudioBuffer: AudioBuffer | undefined;
-let currentMediaSource: MediaSource | undefined;
-let currentStreamAudioElement: HTMLAudioElement | undefined;
+let msePlayer: MSEAudioPlayer | undefined;
 
 export function MyApp3({
     host = 'http://localhost' as string, port = Constants.port as number
@@ -243,23 +243,11 @@ export function MyApp3({
             URL.revokeObjectURL($.downloadResults.audioUrl);
         }
         
-        // Clean up MSE audio element
-        if (currentStreamAudioElement) {
-            currentStreamAudioElement.pause();
-            currentStreamAudioElement.src = '';
-            currentStreamAudioElement.load();
-            currentStreamAudioElement = undefined;
+        // Clean up MSE player
+        if (msePlayer) {
+            msePlayer.cleanup();
+            msePlayer = undefined;
         }
-        
-        // Clean up MediaSource
-        if (currentMediaSource && currentMediaSource.readyState === 'open') {
-            try {
-                currentMediaSource.endOfStream();
-            } catch (e) {
-                // Already ended
-            }
-        }
-        currentMediaSource = undefined;
         
         // Clean up Web Audio API resources
         if (webAudioSource) {
@@ -333,23 +321,11 @@ export function MyApp3({
     const downloadAudio = async () => {
         if (!$.demoModule) return;
         
-        // Clean up any existing MSE stream audio element
-        if (currentStreamAudioElement) {
-            currentStreamAudioElement.pause();
-            currentStreamAudioElement.src = '';
-            currentStreamAudioElement.load();
-            currentStreamAudioElement = undefined;
+        // Clean up MSE player
+        if (msePlayer) {
+            msePlayer.cleanup();
+            msePlayer = undefined;
         }
-        
-        // Clean up MediaSource
-        if (currentMediaSource && currentMediaSource.readyState === 'open') {
-            try {
-                currentMediaSource.endOfStream();
-            } catch (e) {
-                // Already ended
-            }
-        }
-        currentMediaSource = undefined;
         
         // Stop any existing Web Audio API playback
         if (webAudioSource) {
@@ -397,23 +373,10 @@ export function MyApp3({
             audioElement.currentTime = 0;
         }
         
-        // Clean up any existing MSE stream audio element
-        if (currentStreamAudioElement) {
-            currentStreamAudioElement.pause();
-            currentStreamAudioElement.src = '';
-            currentStreamAudioElement.load(); // Force cleanup
-            currentStreamAudioElement = undefined;
+        // Clean up MSE player
+        if (msePlayer) {
+            msePlayer.cleanup();
         }
-        
-        // Clean up MediaSource
-        if (currentMediaSource && currentMediaSource.readyState === 'open') {
-            try {
-                currentMediaSource.endOfStream();
-            } catch (e) {
-                // Already ended
-            }
-        }
-        currentMediaSource = undefined;
         
         // Stop any existing Web Audio API playback
         if (webAudioSource) {
@@ -433,84 +396,36 @@ export function MyApp3({
         try {
             const audioBlob = await $.demoModule.downloadAudioFile();
             
-            // Use Media Source Extensions for low-latency streaming playback
-            currentMediaSource = new MediaSource();
-            currentStreamAudioElement = document.createElement('audio');
-            currentStreamAudioElement.controls = false;
-            currentStreamAudioElement.src = URL.createObjectURL(currentMediaSource);
+            // Create and use MSE player for low-latency streaming
+            msePlayer = new MSEAudioPlayer();
             
-            // Store reference for playback control
-            webAudioContext = currentStreamAudioElement as any; // Reuse variable name but store audio element
-            
-            currentMediaSource.addEventListener('sourceopen', async () => {
-                try {
-                    const sourceBuffer = currentMediaSource!.addSourceBuffer('audio/mpeg');
-                    const arrayBuffer = await audioBlob.arrayBuffer();
-                    
-                    // Calculate chunk size (e.g., 256KB chunks for smooth streaming)
-                    const chunkSize = 256 * 1024;
-                    let offset = 0;
-                    let isFirstChunk = true;
-                    
-                    const appendNextChunk = async () => {
-                        if (offset >= arrayBuffer.byteLength) {
-                            if (currentMediaSource && currentMediaSource.readyState === 'open') {
-                                currentMediaSource.endOfStream();
-                            }
-                            return;
-                        }
-                        
-                        const chunk = arrayBuffer.slice(offset, offset + chunkSize);
-                        offset += chunkSize;
-                        
-                        sourceBuffer.appendBuffer(chunk);
-                        
-                        // Start playback as soon as first chunk is loaded!
-                        if (isFirstChunk && currentStreamAudioElement) {
-                            isFirstChunk = false;
-                            currentStreamAudioElement.play().catch(console.error);
-                            $.webAudio.isPlaying = true;
-                            $.webAudio.isPaused = false;
-                            $.loading = false;
-                        }
-                    };
-                    
-                    sourceBuffer.addEventListener('updateend', () => {
-                        if (!sourceBuffer.updating && offset < arrayBuffer.byteLength) {
-                            appendNextChunk();
-                        }
-                    });
-                    
-                    // Start the streaming process
-                    appendNextChunk();
-                    
-                    // Update duration when metadata is loaded
-                    if (currentStreamAudioElement) {
-                        currentStreamAudioElement.addEventListener('loadedmetadata', () => {
-                            if (currentStreamAudioElement) {
-                                $.webAudio.duration = currentStreamAudioElement.duration;
-                                $.webAudio.sampleRate = 48000; // MP3 typical
-                                $.webAudio.channels = 2; // Stereo typical
-                            }
-                        });
-                        
-                        // Handle end of playback
-                        currentStreamAudioElement.addEventListener('ended', () => {
-                            $.webAudio.isPlaying = false;
-                            $.webAudio.isPaused = false;
-                        });
-                    }
-                    
-                    $.results.error = undefined;
-                } catch (error) {
-                    console.error('❌ MSE streaming failed:', error);
-                    $.results.error = `MSE streaming failed: ${error}`;
+            await msePlayer.loadAndPlay(
+                audioBlob,
+                // On playback start
+                () => {
+                    $.webAudio.isPlaying = true;
+                    $.webAudio.isPaused = false;
                     $.loading = false;
+                },
+                // On metadata loaded
+                (duration) => {
+                    $.webAudio.duration = duration;
+                    $.webAudio.sampleRate = 48000; // MP3 typical
+                    $.webAudio.channels = 2; // Stereo typical
+                },
+                // On ended
+                () => {
+                    $.webAudio.isPlaying = false;
+                    $.webAudio.isPaused = false;
                 }
-            });
+            );
+            
+            // Store reference for compatibility with pause/play/stop functions
+            webAudioContext = msePlayer.getAudioElement() as any;
+            $.results.error = undefined;
         } catch (error) {
-            console.error('❌ Web Audio API setup failed:', error);
-            $.results.error = `Web Audio API setup failed: ${error}`;
+            console.error('❌ MSE streaming failed:', error);
+            $.results.error = `MSE streaming failed: ${error}`;
             $.loading = false;
         }
     };
