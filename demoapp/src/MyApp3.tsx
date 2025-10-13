@@ -7,6 +7,8 @@ import { makeState } from "./ReactiveState";
 let webAudioContext: AudioContext | undefined;
 let webAudioSource: AudioBufferSourceNode | undefined;
 let webAudioBuffer: AudioBuffer | undefined;
+let currentMediaSource: MediaSource | undefined;
+let currentStreamAudioElement: HTMLAudioElement | undefined;
 
 export function MyApp3({
     host = 'http://localhost' as string, port = Constants.port as number
@@ -241,6 +243,24 @@ export function MyApp3({
             URL.revokeObjectURL($.downloadResults.audioUrl);
         }
         
+        // Clean up MSE audio element
+        if (currentStreamAudioElement) {
+            currentStreamAudioElement.pause();
+            currentStreamAudioElement.src = '';
+            currentStreamAudioElement.load();
+            currentStreamAudioElement = undefined;
+        }
+        
+        // Clean up MediaSource
+        if (currentMediaSource && currentMediaSource.readyState === 'open') {
+            try {
+                currentMediaSource.endOfStream();
+            } catch (e) {
+                // Already ended
+            }
+        }
+        currentMediaSource = undefined;
+        
         // Clean up Web Audio API resources
         if (webAudioSource) {
             try {
@@ -251,8 +271,12 @@ export function MyApp3({
             }
             webAudioSource = undefined;
         }
+        
+        // Close AudioContext only if it's actually an AudioContext (not HTMLAudioElement)
         if (webAudioContext) {
-            webAudioContext.close();
+            if ((webAudioContext as any).close && typeof (webAudioContext as any).close === 'function') {
+                (webAudioContext as AudioContext).close();
+            }
             webAudioContext = undefined;
         }
         webAudioBuffer = undefined;
@@ -309,7 +333,25 @@ export function MyApp3({
     const downloadAudio = async () => {
         if (!$.demoModule) return;
         
-        // Stop any existing Web Audio API playback first
+        // Clean up any existing MSE stream audio element
+        if (currentStreamAudioElement) {
+            currentStreamAudioElement.pause();
+            currentStreamAudioElement.src = '';
+            currentStreamAudioElement.load();
+            currentStreamAudioElement = undefined;
+        }
+        
+        // Clean up MediaSource
+        if (currentMediaSource && currentMediaSource.readyState === 'open') {
+            try {
+                currentMediaSource.endOfStream();
+            } catch (e) {
+                // Already ended
+            }
+        }
+        currentMediaSource = undefined;
+        
+        // Stop any existing Web Audio API playback
         if (webAudioSource) {
             try {
                 webAudioSource.stop();
@@ -319,9 +361,10 @@ export function MyApp3({
             }
             webAudioSource = undefined;
         }
-        if (webAudioContext && webAudioContext.state === 'suspended') {
-            await webAudioContext.resume();
+        if (webAudioContext && (webAudioContext as AudioContext).state === 'suspended') {
+            await (webAudioContext as AudioContext).resume();
         }
+        webAudioContext = undefined;
         $.webAudio.isPlaying = false;
         $.webAudio.isPaused = false;
         
@@ -354,6 +397,24 @@ export function MyApp3({
             audioElement.currentTime = 0;
         }
         
+        // Clean up any existing MSE stream audio element
+        if (currentStreamAudioElement) {
+            currentStreamAudioElement.pause();
+            currentStreamAudioElement.src = '';
+            currentStreamAudioElement.load(); // Force cleanup
+            currentStreamAudioElement = undefined;
+        }
+        
+        // Clean up MediaSource
+        if (currentMediaSource && currentMediaSource.readyState === 'open') {
+            try {
+                currentMediaSource.endOfStream();
+            } catch (e) {
+                // Already ended
+            }
+        }
+        currentMediaSource = undefined;
+        
         // Stop any existing Web Audio API playback
         if (webAudioSource) {
             try {
@@ -365,60 +426,122 @@ export function MyApp3({
             webAudioSource = undefined;
         }
         
+        // Reset webAudioContext reference
+        webAudioContext = undefined;
+        
         $.loading = true;
         try {
             const audioBlob = await $.demoModule.downloadAudioFile();
-            const arrayBuffer = await audioBlob.arrayBuffer();
             
-            // Create or reuse AudioContext (stored outside reactive state)
-            if (!webAudioContext || webAudioContext.state === 'closed') {
-                webAudioContext = new AudioContext();
-            }
+            // Use Media Source Extensions for low-latency streaming playback
+            currentMediaSource = new MediaSource();
+            currentStreamAudioElement = document.createElement('audio');
+            currentStreamAudioElement.controls = false;
+            currentStreamAudioElement.src = URL.createObjectURL(currentMediaSource);
             
-            // Resume context if it was suspended
-            if (webAudioContext.state === 'suspended') {
-                await webAudioContext.resume();
-            }
+            // Store reference for playback control
+            webAudioContext = currentStreamAudioElement as any; // Reuse variable name but store audio element
             
-            // Decode audio data (this is the slow part for large files)
-            webAudioBuffer = await webAudioContext.decodeAudioData(arrayBuffer);
-            
-            $.webAudio.duration = webAudioBuffer.duration;
-            $.webAudio.sampleRate = webAudioBuffer.sampleRate;
-            $.webAudio.channels = webAudioBuffer.numberOfChannels;
-            $.results.error = undefined;
-            
-            // Auto-play immediately after setup
-            webAudioSource = webAudioContext.createBufferSource();
-            webAudioSource.buffer = webAudioBuffer;
-            webAudioSource.connect(webAudioContext.destination);
-            webAudioSource.start(0);
-            
-            $.webAudio.isPlaying = true;
-            $.webAudio.isPaused = false;
-            $.webAudio.startTime = webAudioContext.currentTime;
-            
-            // Handle end of playback
-            webAudioSource.onended = () => {
-                $.webAudio.isPlaying = false;
-                $.webAudio.isPaused = false;
-                $.webAudio.pauseTime = 0;
-            };
+            currentMediaSource.addEventListener('sourceopen', async () => {
+                try {
+                    const sourceBuffer = currentMediaSource!.addSourceBuffer('audio/mpeg');
+                    const arrayBuffer = await audioBlob.arrayBuffer();
+                    
+                    // Calculate chunk size (e.g., 256KB chunks for smooth streaming)
+                    const chunkSize = 256 * 1024;
+                    let offset = 0;
+                    let isFirstChunk = true;
+                    
+                    const appendNextChunk = async () => {
+                        if (offset >= arrayBuffer.byteLength) {
+                            if (currentMediaSource && currentMediaSource.readyState === 'open') {
+                                currentMediaSource.endOfStream();
+                            }
+                            return;
+                        }
+                        
+                        const chunk = arrayBuffer.slice(offset, offset + chunkSize);
+                        offset += chunkSize;
+                        
+                        sourceBuffer.appendBuffer(chunk);
+                        
+                        // Start playback as soon as first chunk is loaded!
+                        if (isFirstChunk && currentStreamAudioElement) {
+                            isFirstChunk = false;
+                            currentStreamAudioElement.play().catch(console.error);
+                            $.webAudio.isPlaying = true;
+                            $.webAudio.isPaused = false;
+                            $.loading = false;
+                        }
+                    };
+                    
+                    sourceBuffer.addEventListener('updateend', () => {
+                        if (!sourceBuffer.updating && offset < arrayBuffer.byteLength) {
+                            appendNextChunk();
+                        }
+                    });
+                    
+                    // Start the streaming process
+                    appendNextChunk();
+                    
+                    // Update duration when metadata is loaded
+                    if (currentStreamAudioElement) {
+                        currentStreamAudioElement.addEventListener('loadedmetadata', () => {
+                            if (currentStreamAudioElement) {
+                                $.webAudio.duration = currentStreamAudioElement.duration;
+                                $.webAudio.sampleRate = 48000; // MP3 typical
+                                $.webAudio.channels = 2; // Stereo typical
+                            }
+                        });
+                        
+                        // Handle end of playback
+                        currentStreamAudioElement.addEventListener('ended', () => {
+                            $.webAudio.isPlaying = false;
+                            $.webAudio.isPaused = false;
+                        });
+                    }
+                    
+                    $.results.error = undefined;
+                } catch (error) {
+                    console.error('❌ MSE streaming failed:', error);
+                    $.results.error = `MSE streaming failed: ${error}`;
+                    $.loading = false;
+                }
+            });
         } catch (error) {
             console.error('❌ Web Audio API setup failed:', error);
             $.results.error = `Web Audio API setup failed: ${error}`;
-        } finally {
             $.loading = false;
         }
     };
 
     const playWebAudio = async () => {
+        // Check if we're using MSE (audio element stored in webAudioContext)
+        if (webAudioContext && (webAudioContext as any).play) {
+            const audioElement = webAudioContext as any as HTMLAudioElement;
+            
+            if ($.webAudio.isPaused) {
+                // Resume from pause
+                audioElement.play();
+                $.webAudio.isPlaying = true;
+                $.webAudio.isPaused = false;
+            } else {
+                // Restart from beginning
+                audioElement.currentTime = 0;
+                audioElement.play();
+                $.webAudio.isPlaying = true;
+                $.webAudio.isPaused = false;
+            }
+            return;
+        }
+        
+        // Fallback: original Web Audio API code (if ever used)
         if (!webAudioBuffer || !webAudioContext) return;
         
         try {
             // If paused, just resume the audio context
-            if ($.webAudio.isPaused && webAudioContext.state === 'suspended') {
-                await webAudioContext.resume();
+            if ($.webAudio.isPaused && (webAudioContext as AudioContext).state === 'suspended') {
+                await (webAudioContext as AudioContext).resume();
                 $.webAudio.isPlaying = true;
                 $.webAudio.isPaused = false;
                 return;
@@ -435,16 +558,16 @@ export function MyApp3({
             }
             
             // Create new source
-            webAudioSource = webAudioContext.createBufferSource();
+            webAudioSource = (webAudioContext as AudioContext).createBufferSource();
             webAudioSource.buffer = webAudioBuffer;
-            webAudioSource.connect(webAudioContext.destination);
+            webAudioSource.connect((webAudioContext as AudioContext).destination);
             
             // Start playback from beginning
             webAudioSource.start(0);
             
             $.webAudio.isPlaying = true;
             $.webAudio.isPaused = false;
-            $.webAudio.startTime = webAudioContext.currentTime;
+            $.webAudio.startTime = (webAudioContext as AudioContext).currentTime;
             
             // Handle end of playback
             webAudioSource.onended = () => {
@@ -463,9 +586,18 @@ export function MyApp3({
         if (!$.webAudio.isPlaying || !webAudioContext) return;
         
         try {
-            await webAudioContext.suspend();
-            $.webAudio.isPlaying = false;
-            $.webAudio.isPaused = true;
+            // Check if we're using MSE (audio element stored in webAudioContext)
+            if ((webAudioContext as any).pause) {
+                const audioElement = webAudioContext as any as HTMLAudioElement;
+                audioElement.pause();
+                $.webAudio.isPlaying = false;
+                $.webAudio.isPaused = true;
+            } else {
+                // Fallback: original Web Audio API suspend
+                await (webAudioContext as AudioContext).suspend();
+                $.webAudio.isPlaying = false;
+                $.webAudio.isPaused = true;
+            }
         } catch (error: any) {
             console.error('❌ Web Audio pause failed:', error);
             $.results.error = `Web Audio pause failed: ${error}`;
@@ -473,12 +605,27 @@ export function MyApp3({
     };
 
     const stopWebAudio = () => {
-        if (!webAudioSource || !webAudioContext) return;
+        if (!webAudioContext) return;
         
         try {
+            // Check if we're using MSE (audio element stored in webAudioContext)
+            if ((webAudioContext as any).pause) {
+                const audioElement = webAudioContext as any as HTMLAudioElement;
+                audioElement.pause();
+                audioElement.currentTime = 0;
+                $.webAudio.isPlaying = false;
+                $.webAudio.isPaused = false;
+                $.webAudio.pauseTime = 0;
+                $.webAudio.startTime = 0;
+                return;
+            }
+            
+            // Fallback: original Web Audio API code
+            if (!webAudioSource) return;
+            
             // Resume context if suspended, then stop
-            if (webAudioContext.state === 'suspended') {
-                webAudioContext.resume();
+            if ((webAudioContext as AudioContext).state === 'suspended') {
+                (webAudioContext as AudioContext).resume();
             }
             
             // Stop the source
