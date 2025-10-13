@@ -16,7 +16,12 @@ declare global {
 
   // Minimal Buffer type for browser compatibility
   const Buffer: {
-    from(data: any): { toString(encoding: string): string };
+    from(data: any, encoding?: string): {
+      toString(encoding: string): string;
+      buffer: ArrayBuffer;
+      byteOffset: number;
+      byteLength: number;
+    };
   } | undefined;
 }
 

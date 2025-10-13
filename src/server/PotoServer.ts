@@ -997,18 +997,31 @@ function _containsBlobs(args: any[]): boolean {
 }
 
 /**
- * Recursively check if an object contains Blobs
+ * Recursively check if an object contains Blobs or binary data
+ * 
+ * Detects Blobs, ArrayBuffers, and TypedArrays to trigger async serialization
+ * with native base64 encoding (much faster!).
  */
 function _hasBlob(obj: any, depth: number = 0, maxDepth: number = 10): boolean {
 	if (depth > maxDepth) return false;
 	
+	// Always use async for Blobs
 	if (obj instanceof Blob) return true;
+	
+	// Use async for binary data to leverage native Buffer.toString('base64')
+	// This provides much faster base64 encoding compared to JavaScript loops
+	if (obj instanceof ArrayBuffer) return true;
+	if (ArrayBuffer.isView(obj)) return true;  // Detects Uint8Array, Int16Array, etc.
 	
 	if (Array.isArray(obj)) {
 		return obj.some(item => _hasBlob(item, depth + 1, maxDepth));
 	}
 	
 	if (obj && typeof obj === 'object') {
+		// Skip Date, RegExp, Map, Set - they don't contain binary data
+		if (obj instanceof Date || obj instanceof RegExp || obj instanceof Map || obj instanceof Set) {
+			return false;
+		}
 		return Object.values(obj).some(value => _hasBlob(value, depth + 1, maxDepth));
 	}
 	

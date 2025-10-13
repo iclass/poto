@@ -1,5 +1,5 @@
 import { PotoClient } from "poto";
-import { Constants, ServerInfo, GenData, ImageSize } from "./demoConsts";
+import { Constants, ServerInfo, GenData, ImageSize, ImageResponse } from "./demoConsts";
 import type { DemoModule } from "./DemoModule";
 import { makeState } from "./ReactiveState";
 
@@ -30,6 +30,8 @@ export function MyApp3({
                     serverInfo: undefined as ServerInfo | undefined,
                     streamData: undefined as GenData[] | undefined,
                     imageSize: undefined as ImageSize | undefined,
+                    imageResponse: undefined as ImageResponse | undefined,
+                    imageUrl: undefined as string | undefined,
                     adminSecret: undefined as any,
                     error: undefined as string | undefined,
                 },
@@ -150,13 +152,52 @@ export function MyApp3({
         if (!$.demoModule || !$.selectedFile) return;
 
         $.loading = true;
+        const startTotal = performance.now();
         
         try {
+            // Log file metadata
+            console.log('📁 File Info:', {
+                name: $.selectedFile.name,
+                size: `${($.selectedFile.size / 1024 / 1024).toFixed(2)} MB`,
+                type: $.selectedFile.type,
+                lastModified: new Date($.selectedFile.lastModified).toISOString()
+            });
+            
+            const startConversion = performance.now();
             const arrayBuffer = await $.selectedFile.arrayBuffer();
             const imageBuffer = new Uint8Array(arrayBuffer);
-            const imageSize = await $.demoModule.getImageSize(imageBuffer);
+            const conversionTime = performance.now() - startConversion;
             
-            $.results.imageSize = imageSize;
+            const startRpc = performance.now();
+            const imageResponse = await $.demoModule.getImageSize(imageBuffer);
+            const rpcTime = performance.now() - startRpc;
+            
+            const totalTime = performance.now() - startTotal;
+            
+            // Verify type preservation and data integrity
+            const receivedType = imageResponse.imageData.constructor.name;
+            const dataMatches = imageResponse.imageData.length === imageBuffer.length;
+            const typeMatches = receivedType === 'Uint8Array';
+            
+            console.log('⏱️ getImageSize (Uint8Array) Performance:');
+            console.log(`  - File size: ${($.selectedFile.size / 1024 / 1024).toFixed(2)} MB (${$.selectedFile.size.toLocaleString()} bytes)`);
+            console.log(`  - Client File→Uint8Array: ${conversionTime.toFixed(2)}ms`);
+            console.log(`  - RPC round-trip time: ${rpcTime.toFixed(2)}ms`);
+            console.log(`  - Total time: ${totalTime.toFixed(2)}ms`);
+            console.log(`  - Throughput: ${(($.selectedFile.size / 1024 / 1024) / (totalTime / 1000)).toFixed(2)} MB/s`);
+            console.log(`  - 🔄 Round-trip: Uint8Array → Server → ${receivedType} ${typeMatches ? '✅' : '❌'}`);
+            console.log(`  - Type preserved: ${typeMatches ? '✅ YES!' : '❌ NO! Got ' + receivedType}`);
+            console.log(`  - Data integrity: ${dataMatches ? '✅ Perfect match!' : '❌ Mismatch!'}`);
+            console.log(`  - Server reported type: ${imageResponse.dataType}`);
+            console.log(`  - ✨ Uses native encoding/decoding on both sides!`);
+            
+            // Create image URL from returned data
+            const blob = new Blob([imageResponse.imageData], { type: 'image/png' } as any);
+            const imageUrl = URL.createObjectURL(blob);
+            
+            $.results.imageSize = { width: imageResponse.width, height: imageResponse.height };
+            $.results.imageResponse = imageResponse;
+            $.results.imageUrl = imageUrl;
             $.results.error = undefined;
         } catch (error) {
             console.error('Failed to get image size:', error);
@@ -165,6 +206,122 @@ export function MyApp3({
             $.loading = false;
         }
     };
+
+    const getImageSizeArrayBuffer = async () => {
+        if (!$.demoModule || !$.selectedFile) return;
+
+        $.loading = true;
+        const startTotal = performance.now();
+        
+        try {
+            // Log file metadata
+            console.log('📁 File Info:', {
+                name: $.selectedFile.name,
+                size: `${($.selectedFile.size / 1024 / 1024).toFixed(2)} MB`,
+                type: $.selectedFile.type,
+                lastModified: new Date($.selectedFile.lastModified).toISOString()
+            });
+            
+            const startConversion = performance.now();
+            const arrayBuffer = await $.selectedFile.arrayBuffer();
+            const conversionTime = performance.now() - startConversion;
+            
+            const startRpc = performance.now();
+            const imageResponse = await $.demoModule.getImageSizeArrayBuffer(arrayBuffer);
+            const rpcTime = performance.now() - startRpc;
+            
+            const totalTime = performance.now() - startTotal;
+            
+            // Verify type preservation and data integrity
+            const receivedType = imageResponse.imageData.constructor.name;
+            const dataMatches = imageResponse.imageData.byteLength === arrayBuffer.byteLength;
+            const typeMatches = receivedType === 'ArrayBuffer';
+            
+            console.log('⏱️ getImageSizeArrayBuffer (ArrayBuffer) Performance:');
+            console.log(`  - File size: ${($.selectedFile.size / 1024 / 1024).toFixed(2)} MB (${$.selectedFile.size.toLocaleString()} bytes)`);
+            console.log(`  - Client File→ArrayBuffer: ${conversionTime.toFixed(2)}ms`);
+            console.log(`  - RPC round-trip time: ${rpcTime.toFixed(2)}ms`);
+            console.log(`  - Total time: ${totalTime.toFixed(2)}ms`);
+            console.log(`  - Throughput: ${(($.selectedFile.size / 1024 / 1024) / (totalTime / 1000)).toFixed(2)} MB/s`);
+            console.log(`  - 🔄 Round-trip: ArrayBuffer → Server → ${receivedType} ${typeMatches ? '✅' : '❌'}`);
+            console.log(`  - Type preserved: ${typeMatches ? '✅ YES!' : '❌ NO! Got ' + receivedType}`);
+            console.log(`  - Data integrity: ${dataMatches ? '✅ Perfect match!' : '❌ Mismatch!'}`);
+            console.log(`  - Server reported type: ${imageResponse.dataType}`);
+            console.log(`  - ✨ Uses native encoding/decoding on both sides!`);
+            
+            // Create image URL from returned data
+            const blob = new Blob([imageResponse.imageData], { type: 'image/png' } as any);
+            const imageUrl = URL.createObjectURL(blob);
+            
+            $.results.imageSize = { width: imageResponse.width, height: imageResponse.height };
+            $.results.imageResponse = imageResponse;
+            $.results.imageUrl = imageUrl;
+            $.results.error = undefined;
+        } catch (error) {
+            console.error('Failed to get image size array buffer:', error);
+            $.results.error = `Failed to get image size array buffer: ${error}`;
+        } finally {
+            $.loading = false;
+        }
+    }
+
+    const getImageSizeDirectFile = async () => {
+        if (!$.demoModule || !$.selectedFile) return;
+
+        $.loading = true;
+        const startTotal = performance.now();
+        
+        try {
+            // Log file metadata
+            console.log('📁 File Info:', {
+                name: $.selectedFile.name,
+                size: `${($.selectedFile.size / 1024 / 1024).toFixed(2)} MB`,
+                type: $.selectedFile.type,
+                lastModified: new Date($.selectedFile.lastModified).toISOString()
+            });
+            
+            const startRpc = performance.now();
+            // Simplest syntax - just pass the File directly!
+            const imageResponse = await $.demoModule.getImageSizeFile($.selectedFile);
+            const rpcTime = performance.now() - startRpc;
+            
+            const totalTime = performance.now() - startTotal;
+            
+            // Verify type preservation and data integrity
+            const receivedType = imageResponse.imageData.constructor.name;
+            const dataMatches = imageResponse.imageData.size === $.selectedFile.size;
+            const typeMatches = receivedType === 'File';
+            const nameMatches = imageResponse.imageData.name === $.selectedFile.name;
+            const typeStringMatches = imageResponse.imageData.type === $.selectedFile.type;
+            
+            console.log('⏱️ getImageSizeFile (File/Blob) Performance:');
+            console.log(`  - File size: ${($.selectedFile.size / 1024 / 1024).toFixed(2)} MB (${$.selectedFile.size.toLocaleString()} bytes)`);
+            console.log(`  - RPC round-trip time: ${rpcTime.toFixed(2)}ms`);
+            console.log(`    (includes native FileReader base64 encoding + server processing)`);
+            console.log(`  - Total time: ${totalTime.toFixed(2)}ms`);
+            console.log(`  - Throughput: ${(($.selectedFile.size / 1024 / 1024) / (totalTime / 1000)).toFixed(2)} MB/s`);
+            console.log(`  - 🔄 Round-trip: File → Server → ${receivedType} ${typeMatches ? '✅' : '❌'}`);
+            console.log(`  - Type preserved: ${typeMatches ? '✅ YES!' : '❌ NO! Got ' + receivedType}`);
+            console.log(`  - File name preserved: ${nameMatches ? '✅' : '❌'} (${imageResponse.imageData.name})`);
+            console.log(`  - MIME type preserved: ${typeStringMatches ? '✅' : '❌'} (${imageResponse.imageData.type})`);
+            console.log(`  - Data integrity: ${dataMatches ? '✅ Perfect match!' : '❌ Mismatch!'}`);
+            console.log(`  - Server reported type: ${imageResponse.dataType}`);
+            console.log(`  - ✨ Full File object preserved through RPC!`);
+            
+            // Create image URL from returned File
+            const imageUrl = URL.createObjectURL(imageResponse.imageData);
+            
+            $.results.imageSize = { width: imageResponse.width, height: imageResponse.height };
+            $.results.imageResponse = imageResponse;
+            $.results.imageUrl = imageUrl;
+            $.results.error = undefined;
+        } catch (error) {
+            console.error('Failed to get image size blob:', error);
+            $.results.error = `Failed to get image size blob: ${error}`;
+        } finally {
+            $.loading = false;
+        }
+    }
 
     const testAdminSecret = async () => {
         if (!$.demoModule) return;
@@ -183,12 +340,19 @@ export function MyApp3({
     };
 
     const clearResults = () => {
+        // Clean up image URL to prevent memory leaks
+        if ($.results.imageUrl) {
+            URL.revokeObjectURL($.results.imageUrl);
+        }
+        
         $.results = {
             greeting: undefined,
             echo: undefined,
             serverInfo: undefined,
             streamData: undefined,
             imageSize: undefined,
+            imageResponse: undefined,
+            imageUrl: undefined,
             adminSecret: undefined,
             error: undefined,
         };
@@ -197,6 +361,7 @@ export function MyApp3({
     const handleMessageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         $.messageInput = e.target.value;
     };
+
 
     return (
         <div className="container">
@@ -327,7 +492,19 @@ export function MyApp3({
                         onClick={getImageSize}
                         disabled={$.loading || !$.isConnected || !$.currentUser || !$.selectedFile}
                     >
-                        Get Image Size
+                        Get Image Size (Uint8Array)
+                    </button>
+                    <button
+                        onClick={getImageSizeArrayBuffer}
+                        disabled={$.loading || !$.isConnected || !$.currentUser || !$.selectedFile}
+                    >
+                        Get Image Size (ArrayBuffer)
+                    </button>
+                    <button
+                        onClick={getImageSizeDirectFile}
+                        disabled={$.loading || !$.isConnected || !$.currentUser || !$.selectedFile}
+                    >
+                        Get Image Size (Blob) ✨
                     </button>
                 </div>
 
@@ -335,6 +512,22 @@ export function MyApp3({
                     <div className="result">
                         <h4>📐 Image Size:</h4>
                         <p>Width: {$.results.imageSize.width}px | Height: {$.results.imageSize.height}px</p>
+                        {$.results.imageResponse && (
+                            <p><small>Original size: {($.results.imageResponse.originalSize / 1024 / 1024).toFixed(2)} MB | 
+                            Type: {$.results.imageResponse.dataType}</small></p>
+                        )}
+                    </div>
+                )}
+                
+                {$.results.imageUrl && (
+                    <div className="result">
+                        <h4>🔄 Round-Trip Image (Server Echo):</h4>
+                        <p><small>This image was sent to server and returned back! ✅</small></p>
+                        <img 
+                            src={$.results.imageUrl} 
+                            alt="Round-trip test" 
+                            style={{maxWidth: '300px', border: '2px solid #4CAF50', borderRadius: '8px'}}
+                        />
                     </div>
                 )}
             </div>

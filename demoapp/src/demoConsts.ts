@@ -32,3 +32,29 @@ export type ImageSize = {
   width: number;
   height: number;
 }
+
+export type ImageResponseUint8 = {
+  width: number;
+  height: number;
+  imageData: Uint8Array;  // Echo back Uint8Array
+  originalSize: number;
+  dataType: 'Uint8Array';
+}
+
+export type ImageResponseArrayBuffer = {
+  width: number;
+  height: number;
+  imageData: ArrayBuffer;  // Echo back ArrayBuffer
+  originalSize: number;
+  dataType: 'ArrayBuffer';
+}
+
+export type ImageResponseFile = {
+  width: number;
+  height: number;
+  imageData: File;  // Echo back File
+  originalSize: number;
+  dataType: 'File';
+}
+
+export type ImageResponse = ImageResponseUint8 | ImageResponseArrayBuffer | ImageResponseFile;

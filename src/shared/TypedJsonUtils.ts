@@ -51,6 +51,38 @@ export function stringifyTypedJson(data: any, space?: string | number): string {
 }
 
 /**
+ * Async JSON parsing with native binary decoding (FAST!)
+ * 
+ * Uses native browser APIs (fetch + data URL) for base64 decoding,
+ * which is much faster than the sync atob() + loop approach for binary data.
+ * 
+ * This is the async equivalent of parseTypedJson()
+ */
+export async function parseTypedJsonAsync<T = any>(jsonString: string): Promise<T> {
+  try {
+    // First try parsing as regular JSON
+    const parsed = JSON.parse(jsonString);
+    
+    // Check if this is type-preserved JSON
+    if (TypedJSON.isTypePreserved(parsed)) {
+      // Use TypedJSON async parser for native binary decoding
+      return await TypedJSON.parseAsync<T>(jsonString);
+    }
+    
+    // Return regular JSON as-is
+    return parsed as T;
+  } catch (error) {
+    // If JSON.parse fails, try TypedJSON.parseAsync as fallback
+    try {
+      return await TypedJSON.parseAsync<T>(jsonString);
+    } catch (typedError) {
+      // Re-throw the original error for better debugging
+      throw error;
+    }
+  }
+}
+
+/**
  * Async version of stringifyJson that handles Blobs properly
  */
 export async function stringifyTypedJsonAsync(data: any, space?: string | number): Promise<string> {
