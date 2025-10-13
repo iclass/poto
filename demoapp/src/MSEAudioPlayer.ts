@@ -29,8 +29,7 @@ export class MSEAudioPlayer {
         
         return new Promise((resolve, reject) => {
             this.mediaSource = new MediaSource();
-            this.audioElement = document.createElement('audio');
-            this.audioElement.controls = false;
+            this.audioElement = new Audio();
             this.audioElement.src = URL.createObjectURL(this.mediaSource);
             
             this.mediaSource.addEventListener('sourceopen', async () => {
