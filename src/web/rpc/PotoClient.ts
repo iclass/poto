@@ -395,7 +395,14 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 				yield value;
 			}
 		} finally {
-			reader.releaseLock();
+			// Some runtimes may not implement releaseLock or may throw; guard it
+			try {
+				if (reader && typeof (reader as any).releaseLock === 'function') {
+					(reader as any).releaseLock();
+				}
+			} catch (_e) {
+				// ignore
+			}
 		}
 	}
 

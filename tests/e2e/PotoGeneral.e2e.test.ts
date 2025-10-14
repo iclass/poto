@@ -107,12 +107,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         }
     });
 
-    // Create a fresh client for each test to ensure isolation
-    beforeEach(async () => {
-        // Small delay to avoid test interference in CI
-        await new Promise(resolve => setTimeout(resolve, 10));
-        client = await createTestClient();
-    });
+    // Removed shared per-test client to avoid races under --concurrent
 
     it("should connect client to server and authenticate", async () => {
         const client = await createTestClient();
@@ -201,6 +196,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     });
 
     it("should handle empty generator correctly", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         const gen = await testGeneratorProxy.postEmptyGenerator_();
@@ -215,6 +211,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     });
 
     it("should handle async generator with string processing", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         const items = ["hello", "world", "test"];
@@ -248,6 +245,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     });
 
     it("should handle regular non-generator methods", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         const result = await testGeneratorProxy.postRegularMethod_("test message");
@@ -255,6 +253,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     });
 
     it("should handle methods without HTTP verb prefixes (defaulting to POST)", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         expect(client.userId).toBeDefined();
@@ -264,6 +263,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     });
 
     it("should handle generator methods without HTTP verb prefixes (defaulting to POST)", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         const items = ["apple", "banana", "cherry"];
@@ -294,6 +294,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     });
 
     it("should handle progress tracking generator", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         const gen = await testGeneratorProxy.postProgressGenerator_(3);
@@ -328,6 +329,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     });
 
     it("should handle large data generator", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         const gen = await testGeneratorProxy.postLargeDataGenerator_(5);
@@ -351,6 +353,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     });
 
     it("should handle concurrent generator requests", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         // Create multiple concurrent requests
@@ -383,6 +386,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
 
     describe("ReadableStream Method Tests", () => {
         it("should handle ReadableStream method end-to-end", async () => {
+            const client = await createTestClient();
             const testGeneratorProxy = makeProxy(client);
 
             const stream = await testGeneratorProxy.postReadableStream_("Hello world test message");
@@ -433,6 +437,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         });
 
         it("should handle binary ReadableStream method end-to-end", async () => {
+            const client = await createTestClient();
             const testGeneratorProxy = makeProxy(client);
 
             const stream = await testGeneratorProxy.postBinaryStream_("test-file.bin");
@@ -500,6 +505,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         });
 
         it("should handle concurrent ReadableStream requests", async () => {
+            const client = await createTestClient();
             const testGeneratorProxy = makeProxy(client);
 
             // Create multiple concurrent ReadableStream requests
@@ -546,6 +552,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         });
 
         it("should handle ReadableStream cancellation", async () => {
+            const client = await createTestClient();
             const testGeneratorProxy = makeProxy(client);
 
             const stream = await testGeneratorProxy.postReadableStream_("This is a long message for cancellation testing");
@@ -587,6 +594,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         });
 
         it("should verify ReadableStream vs Generator method differences", async () => {
+            const client = await createTestClient();
             const testGeneratorProxy = makeProxy(client);
 
             // Test ReadableStream method with timeout
@@ -643,6 +651,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     });
 
     it("should handle stream cancellation", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         const gen = await testGeneratorProxy.postLargeDataGenerator_(100);
@@ -666,6 +675,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     });
 
     it("should handle authentication with different users", async () => {
+        const client = await createTestClient();
         // Create a second client with different credentials
         const mockStorage = {
             getItem: (key: string): string | null => null,
@@ -702,6 +712,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     });
 
     it("should handle mixed generator and non-generator methods", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         // Test generator method
@@ -747,6 +758,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
 
     it("should provide end-to-end type safety for generator methods", async () => {
         // Test that generator methods return AsyncGenerator directly
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         // Test generator method - should return AsyncGenerator directly
@@ -1168,6 +1180,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         }
 
         it("should set and get simple session values", async () => {
+            const client = await createTestClient();
             const sessionProxy = makeSessionValueProxy(client);
             
             // Test setting a simple string value
@@ -1185,6 +1198,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         });
 
         it("should handle multiple session values", async () => {
+            const client = await createTestClient();
             const sessionProxy = makeSessionValueProxy(client);
             
             // Set multiple values
@@ -1207,6 +1221,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         });
 
         it("should persist session values across multiple requests", async () => {
+            const client = await createTestClient();
             const sessionProxy = makeSessionValueProxy(client);
             
             const testData = {
@@ -1231,6 +1246,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         });
 
         it("should handle complex data types in session values", async () => {
+            const client = await createTestClient();
             const sessionProxy = makeSessionValueProxy(client);
             
             const result = await sessionProxy.postTestComplexSessionData_();
@@ -1248,6 +1264,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         });
 
         it("should handle session value updates", async () => {
+            const client = await createTestClient();
             const sessionProxy = makeSessionValueProxy(client);
             
             const key = "updateTest";
@@ -1329,6 +1346,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         });
 
         it("should handle session value errors gracefully", async () => {
+            const client = await createTestClient();
             const sessionProxy = makeSessionValueProxy(client);
             
             // Test getting a non-existent key
@@ -1347,6 +1365,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         });
 
         it("should handle concurrent session value operations", async () => {
+            const client = await createTestClient();
             const sessionProxy = makeSessionValueProxy(client);
             
             // Perform multiple concurrent operations
