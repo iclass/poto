@@ -3,9 +3,12 @@ import { Constants, ServerInfo, GenData, ImageSize } from "./demoConsts";
 import type { DemoModule } from "./DemoModule";
 import { makeState } from "./ReactiveState";
 import { MSEAudioPlayer } from "./MSEAudioPlayer";
+import { StreamingAudioPlayer } from "./StreamingAudioPlayer";
 
 // Store MSE player at module level to persist across renders
 let msePlayer: MSEAudioPlayer | undefined;
+// Store streaming player at module level
+let streamingPlayer: StreamingAudioPlayer | undefined;
 
 export function MyApp3({
     host = 'http://localhost' as string, port = Constants.port as number
@@ -55,6 +58,13 @@ export function MyApp3({
                     channels: undefined as number | undefined,
                     startTime: 0,
                     pauseTime: 0,
+                },
+                streamingAudio: {
+                    isPlaying: false,
+                    isPaused: false,
+                    duration: undefined as number | undefined,
+                    bytesReceived: 0,
+                    isStreaming: false,
                 },
             },
             cleanup: () => {
@@ -269,6 +279,47 @@ export function MyApp3({
         }
     };
 
+    // Centralized function to stop all audio players
+    const stopAllPlayers = () => {
+        // Stop HTML5 audio element
+        const audioElement = document.querySelector('audio');
+        if (audioElement) {
+            audioElement.pause();
+            audioElement.currentTime = 0;
+        }
+        
+        // Clean up MSE player
+        if (msePlayer) {
+            msePlayer.cleanup();
+            msePlayer = undefined;
+        }
+        
+        // Clean up streaming player
+        if (streamingPlayer) {
+            streamingPlayer.cleanup();
+            streamingPlayer = undefined;
+        }
+        
+        // Reset all audio state
+        $.webAudio = {
+            isPlaying: false,
+            isPaused: false,
+            duration: undefined,
+            sampleRate: undefined,
+            channels: undefined,
+            startTime: 0,
+            pauseTime: 0,
+        };
+        
+        $.streamingAudio = {
+            isPlaying: false,
+            isPaused: false,
+            duration: undefined,
+            bytesReceived: 0,
+            isStreaming: false,
+        };
+    };
+
     const clearResults = () => {
         // Clean up URLs to prevent memory leaks
         if ($.downloadResults.fileUrl) {
@@ -278,11 +329,8 @@ export function MyApp3({
             URL.revokeObjectURL($.downloadResults.audioUrl);
         }
         
-        // Clean up MSE player
-        if (msePlayer) {
-            msePlayer.cleanup();
-            msePlayer = undefined;
-        }
+        // Stop all players
+        stopAllPlayers();
         
         
         $.results = {
@@ -313,6 +361,14 @@ export function MyApp3({
             channels: undefined,
             startTime: 0,
             pauseTime: 0,
+        };
+        
+        $.streamingAudio = {
+            isPlaying: false,
+            isPaused: false,
+            duration: undefined,
+            bytesReceived: 0,
+            isStreaming: false,
         };
     };
 
@@ -371,14 +427,8 @@ export function MyApp3({
     const downloadAudio = async () => {
         if (!$.demoModule) return;
         
-        // Clean up MSE player
-        if (msePlayer) {
-            msePlayer.cleanup();
-            msePlayer = undefined;
-        }
-        
-        $.webAudio.isPlaying = false;
-        $.webAudio.isPaused = false;
+        // Stop all other players before starting HTML5 audio
+        stopAllPlayers();
         
         $.loading = true;
         try {
@@ -402,18 +452,8 @@ export function MyApp3({
     const downloadAndPlayWithWebAudio = async () => {
         if (!$.demoModule) return;
         
-        // Stop HTML5 audio player if it's playing
-        const audioElement = document.querySelector('audio');
-        if (audioElement) {
-            audioElement.pause();
-            audioElement.currentTime = 0;
-        }
-        
-        // Clean up MSE player
-        if (msePlayer) {
-            msePlayer.cleanup();
-        }
-        
+        // Stop all other players before starting MSE player
+        stopAllPlayers();
         
         $.loading = true;
         try {
@@ -496,6 +536,91 @@ export function MyApp3({
             $.webAudio.isPaused = false;
             $.webAudio.pauseTime = 0;
         }
+    };
+
+    const streamAndPlayAudio = async () => {
+        if (!$.demoModule) return;
+        
+        // Stop all other players before starting streaming player
+        stopAllPlayers();
+        
+        $.loading = true;
+        $.streamingAudio.bytesReceived = 0;
+        $.streamingAudio.isStreaming = true;
+        
+        try {
+            // Create new streaming player
+            streamingPlayer = new StreamingAudioPlayer();
+            
+            // Get the audio stream from server (Bun streams natively)
+            const audioStream = await $.demoModule.streamAudioFile();
+            
+            // Stream and play
+            await streamingPlayer.streamAndPlay(
+                audioStream,
+                // On playback start
+                () => {
+                    $.streamingAudio.isPlaying = true;
+                    $.streamingAudio.isPaused = false;
+                    $.loading = false;
+                    console.log('🎵 Streaming playback started!');
+                },
+                // On metadata loaded
+                (duration) => {
+                    $.streamingAudio.duration = duration;
+                    console.log(`🎵 Audio duration: ${duration.toFixed(2)}s`);
+                },
+                // On ended
+                () => {
+                    $.streamingAudio.isPlaying = false;
+                    $.streamingAudio.isPaused = false;
+                    $.streamingAudio.isStreaming = false;
+                    console.log('🎵 Streaming playback ended');
+                },
+                // On progress
+                (bytesReceived) => {
+                    $.streamingAudio.bytesReceived = bytesReceived;
+                }
+            );
+            
+            $.streamingAudio.isStreaming = false;
+            $.results.error = undefined;
+        } catch (error) {
+            console.error('❌ Streaming playback failed:', error);
+            $.results.error = `Streaming playback failed: ${error}`;
+            $.streamingAudio.isStreaming = false;
+            $.loading = false;
+        }
+    };
+
+    const playStreamingAudio = () => {
+        if (!streamingPlayer) return;
+        
+        if ($.streamingAudio.isPaused) {
+            streamingPlayer.play();
+            $.streamingAudio.isPlaying = true;
+            $.streamingAudio.isPaused = false;
+        } else {
+            streamingPlayer.restart();
+            $.streamingAudio.isPlaying = true;
+            $.streamingAudio.isPaused = false;
+        }
+    };
+
+    const pauseStreamingAudio = () => {
+        if (!$.streamingAudio.isPlaying || !streamingPlayer) return;
+        
+        streamingPlayer.pause();
+        $.streamingAudio.isPlaying = false;
+        $.streamingAudio.isPaused = true;
+    };
+
+    const stopStreamingAudio = () => {
+        if (!streamingPlayer) return;
+        
+        streamingPlayer.stop();
+        $.streamingAudio.isPlaying = false;
+        $.streamingAudio.isPaused = false;
     };
 
 
@@ -801,6 +926,21 @@ export function MyApp3({
                             autoPlay={$.autoPlayAudio}
                             src={$.downloadResults.audioUrl}
                             style={{width: '100%'}}
+                            onPlay={() => {
+                                // When HTML5 audio plays, stop other players
+                                if (msePlayer) {
+                                    msePlayer.cleanup();
+                                    msePlayer = undefined;
+                                    $.webAudio.isPlaying = false;
+                                    $.webAudio.isPaused = false;
+                                }
+                                if (streamingPlayer) {
+                                    streamingPlayer.cleanup();
+                                    streamingPlayer = undefined;
+                                    $.streamingAudio.isPlaying = false;
+                                    $.streamingAudio.isPaused = false;
+                                }
+                            }}
                         />
                     </div>
                 )}
@@ -846,6 +986,60 @@ export function MyApp3({
                     </div>
                 )}
             </div>
+
+            <div className="demo-section">
+                <h3>🌊 Progressive Streaming Audio (ReadableStream)</h3>
+                <p><small>Server returns a pure ReadableStream that streams chunks over the network progressively</small></p>
+                <div className="button-group">
+                    <button
+                        onClick={streamAndPlayAudio}
+                        disabled={$.loading || !$.isConnected || !$.currentUser}
+                    >
+                        🎵 Stream & Play
+                    </button>
+                    <button
+                        onClick={playStreamingAudio}
+                        disabled={!$.streamingAudio.duration || $.streamingAudio.isPlaying}
+                    >
+                        ▶️ Play
+                    </button>
+                    <button
+                        onClick={pauseStreamingAudio}
+                        disabled={!$.streamingAudio.isPlaying}
+                    >
+                        ⏸️ Pause
+                    </button>
+                    <button
+                        onClick={stopStreamingAudio}
+                        disabled={!$.streamingAudio.isPlaying && !$.streamingAudio.isPaused}
+                    >
+                        ⏹️ Stop
+                    </button>
+                </div>
+
+                {($.streamingAudio.isStreaming || $.streamingAudio.bytesReceived > 0) && (
+                    <div className="result">
+                        <h4>📊 Streaming Progress:</h4>
+                        <p>
+                            <strong>Bytes Received:</strong> {($.streamingAudio.bytesReceived / 1024 / 1024).toFixed(2)} MB
+                            {$.streamingAudio.isStreaming && <span> 🔄 (streaming...)</span>}
+                        </p>
+                        {$.streamingAudio.duration && (
+                            <p>
+                                <strong>Duration:</strong> {$.streamingAudio.duration.toFixed(2)}s | 
+                                <strong> State:</strong> {
+                                    $.streamingAudio.isPlaying ? ' ▶️ Playing' :
+                                    $.streamingAudio.isPaused ? ' ⏸️ Paused' :
+                                    ' ⏹️ Stopped'
+                                }
+                            </p>
+                        )}
+                        <p><small>💡 Audio starts playing as soon as first chunks arrive from server</small></p>
+                    </div>
+                )}
+            </div>
+
+            
 
             <div className="demo-section">
                 <button onClick={clearResults} className="clear-button">

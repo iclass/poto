@@ -160,4 +160,13 @@ export class DemoModule extends PotoModule {
     async downloadAudioFile(): Promise<Blob> {
         return Bun.file(path.join(process.cwd(), 'public', 'Caliente.mp3'));
     }
+
+    /**
+     * Stream audio file as a pure ReadableStream - demonstrates true network streaming
+     * where chunks are sent progressively over the wire
+    // Bun.file().stream() returns a native ReadableStream - simple and efficient!
+     */
+    async streamAudioFile(): Promise<ReadableStream<Uint8Array>> {       
+        return (Bun.file(path.join(process.cwd(), 'public', 'Caliente.mp3'))).stream();
+    }
 }
