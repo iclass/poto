@@ -16,7 +16,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     // Increase timeout for CI environment
     const timeout = process.env.CI ? 30000 : 10000; // 30s in CI, 10s locally
     let server: PotoServer;
-    let client: PotoClient; // This will be created per-test in beforeEach
+    let client: PotoClient; // per-test client instance
     let serverUrl: string;
     const testPort = getRandomPort(); // Use random port to avoid conflicts
 
@@ -24,13 +24,18 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         return theClient.getProxy<TestGeneratorModule>(TestGeneratorModule.name);
     }
 
-    function createTestClient(): PotoClient {
+    async function createTestClient(): Promise<PotoClient> {
         const mockStorage = {
             getItem: (key: string): string | null => null,
             setItem: (key: string, value: string): void => { },
             removeItem: (key: string): void => { }
         };
-        return new PotoClient(serverUrl, mockStorage);
+        const client = new PotoClient(serverUrl, mockStorage);
+        await client.loginAsVisitor();
+        if (!client.userId) {
+            throw new Error("Login succeeded but userId is undefined - critical failure");
+        }
+        return client;
     }
 
     beforeAll(async () => {
@@ -102,28 +107,22 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         }
     });
 
+    // Create a fresh client for each test to ensure isolation
     beforeEach(async () => {
-        // Add small delay to prevent test interference
+        // Small delay to avoid test interference in CI
         await new Promise(resolve => setTimeout(resolve, 10));
-
-        // Create a fresh client for each test to prevent concurrent test interference
-        client = createTestClient();
-
-        // Login as visitor for each test
-        try {
-            await client.loginAsVisitor();
-        } catch (error) {
-            console.warn("Login failed, continuing without auth:", error);
-        }
+        client = await createTestClient();
     });
 
     it("should connect client to server and authenticate", async () => {
+        const client = await createTestClient();
         expect(client.userId).toBeDefined();
         expect(client.token).toBeDefined();
         expect(client.userId).toStartWith("visitor_");
     }, timeout);
 
     it("should invoke simple generator method end-to-end", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         const gen = await testGeneratorProxy.postSimpleGenerator_(3);
@@ -153,6 +152,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     });
 
     it("should invoke fibonacci generator method end-to-end", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         const gen = await testGeneratorProxy.postFibonacciGenerator_(6);
@@ -173,6 +173,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     });
 
     it("should handle successful generator without errors", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         const gen = await testGeneratorProxy.postErrorGenerator_(false);

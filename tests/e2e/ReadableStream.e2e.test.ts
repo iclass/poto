@@ -15,7 +15,6 @@ describe("ReadableStream Method Tests", () => {
     // Increase timeout for CI environment
     const timeout = process.env.CI ? 30000 : 10000; // 30s in CI, 10s locally
     let server: PotoServer;
-    let client: PotoClient; // This will be created per-test in beforeEach
     let serverUrl: string;
     const testPort = getRandomPort(); // Use random port to avoid conflicts
 
@@ -23,13 +22,18 @@ describe("ReadableStream Method Tests", () => {
         return theClient.getProxy<TestGeneratorModule>(TestGeneratorModule.name);
     }
 
-    function createTestClient(): PotoClient {
+    async function createTestClient(): Promise<PotoClient> {
         const mockStorage = {
             getItem: (key: string): string | null => null,
             setItem: (key: string, value: string): void => { },
             removeItem: (key: string): void => { }
         };
-        return new PotoClient(serverUrl, mockStorage);
+        const client = new PotoClient(serverUrl, mockStorage);
+        await client.loginAsVisitor();
+        if (!client.userId) {
+            throw new Error("Login succeeded but userId is undefined - critical failure");
+        }
+        return client;
     }
 
     beforeAll(async () => {
@@ -107,23 +111,11 @@ describe("ReadableStream Method Tests", () => {
         }
     });
 
-    beforeEach(async () => {
-        // Add small delay to prevent test interference
-        await new Promise(resolve => setTimeout(resolve, 10));
-
-        // Create a fresh client for each test to prevent concurrent test interference
-        client = createTestClient();
-
-        // Login as visitor for each test
-        try {
-            await client.loginAsVisitor();
-        } catch (error) {
-            console.warn("Login failed, continuing without auth:", error);
-        }
-    });
+    
 
 
     it("should handle ReadableStream method end-to-end", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         const stream = await testGeneratorProxy.postReadableStream_("Hello world test message");
@@ -174,6 +166,7 @@ describe("ReadableStream Method Tests", () => {
     });
 
     it("should handle binary ReadableStream method end-to-end", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         const stream = await testGeneratorProxy.postBinaryStream_("test-file.bin");
@@ -241,6 +234,7 @@ describe("ReadableStream Method Tests", () => {
     });
 
     it("should handle concurrent ReadableStream requests", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         // Create multiple concurrent ReadableStream requests
@@ -287,6 +281,7 @@ describe("ReadableStream Method Tests", () => {
     });
 
     it("should handle ReadableStream cancellation", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         const stream = await testGeneratorProxy.postReadableStream_("This is a long message for cancellation testing");
@@ -328,6 +323,7 @@ describe("ReadableStream Method Tests", () => {
     });
 
     it("should verify ReadableStream vs Generator method differences", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         // Test ReadableStream method with timeout
@@ -383,6 +379,7 @@ describe("ReadableStream Method Tests", () => {
     });
 
     it("should handle pure binary streaming (audio) - zero SSE overhead", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         console.log("\n🎵 Testing pure binary audio streaming (no SSE overhead)...");
@@ -434,6 +431,7 @@ describe("ReadableStream Method Tests", () => {
     }, timeout);
 
     it("should handle pure binary streaming (video) - 10MB with throughput", async () => {
+        const client = await createTestClient();
         const testGeneratorProxy = makeProxy(client);
 
         console.log("\n🎬 Starting 10MB video binary streaming test...");

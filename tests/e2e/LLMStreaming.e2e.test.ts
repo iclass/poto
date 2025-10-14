@@ -16,7 +16,6 @@ describe("Mock LLM Streaming Tests", () => {
     // Increase timeout for CI environment
     const timeout = process.env.CI ? 30000 : 10000; // 30s in CI, 10s locally
     let server: PotoServer;
-    let client: PotoClient; // This will be created per-test in beforeEach
     let serverUrl: string;
     const testPort = getRandomPort(); // Use random port to avoid conflicts
 
@@ -28,13 +27,18 @@ describe("Mock LLM Streaming Tests", () => {
         return theClient.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
     }
     
-    function createTestClient(): PotoClient {
+    async function createTestClient(): Promise<PotoClient> {
         const mockStorage = {
             getItem: (key: string): string | null => null,
             setItem: (key: string, value: string): void => { },
             removeItem: (key: string): void => { }
         };
-        return new PotoClient(serverUrl, mockStorage);
+        const client = new PotoClient(serverUrl, mockStorage);
+        await client.loginAsVisitor();
+        if (!client.userId) {
+            throw new Error("Login succeeded but userId is undefined - critical failure");
+        }
+        return client;
     }
 
 
@@ -106,22 +110,10 @@ describe("Mock LLM Streaming Tests", () => {
         }
     });
 
-    beforeEach(async () => {
-        // Add small delay to prevent test interference
-        await new Promise(resolve => setTimeout(resolve, 50));
-
-        // Create a fresh client for each test to prevent concurrent test interference
-        client = createTestClient();
-
-        // Login as visitor for each test
-        try {
-            await client.loginAsVisitor();
-        } catch (error) {
-            // Login failed, continuing without auth
-        }
-    });
+    
 
         it("should stream mock LLM responses end-to-end", async () => {
+            const client = await createTestClient();
             const testGeneratorProxy = makeProxy(client);
 
             const gen = await testGeneratorProxy.postLlmStream_("Tell me a story about a cat");
@@ -168,6 +160,7 @@ describe("Mock LLM Streaming Tests", () => {
         });
 
         it("should stream mock LLM responses with progress tracking", async () => {
+            const client = await createTestClient();
             const testGeneratorProxy = makeProxy(client);
 
             const gen = await testGeneratorProxy.postLlmStreamWithProgress_("Explain quantum computing");
@@ -221,6 +214,7 @@ describe("Mock LLM Streaming Tests", () => {
         });
 
         it("should handle different prompt types in mock LLM", async () => {
+            const client = await createTestClient();
             const testGeneratorProxy = makeProxy(client);
 
             // Test different prompt types
@@ -256,6 +250,7 @@ describe("Mock LLM Streaming Tests", () => {
         });
 
         it("should handle concurrent mock LLM streaming requests", async () => {
+            const client = await createTestClient();
             const testGeneratorProxy = makeProxy(client);
 
             // Create multiple concurrent LLM requests with staggered start times
@@ -305,6 +300,7 @@ describe("Mock LLM Streaming Tests", () => {
         });
 
         it("should verify real-time streaming behavior in mock LLM", async () => {
+            const client = await createTestClient();
             const testGeneratorProxy = makeProxy(client);
 
             const startTime = Date.now();
