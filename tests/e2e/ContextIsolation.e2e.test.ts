@@ -15,10 +15,18 @@ describe("Context Isolation Tests", () => {
     // Increase timeout for CI environment
     const timeout = process.env.CI ? 30000 : 10000; // 30s in CI, 10s locally
     let server: PotoServer;
-    let client: PotoClient;
+    let client: PotoClient; // This will be created per-test in beforeEach
     let serverUrl: string;
     const testPort = getRandomPort(); // Use random port to avoid conflicts
 
+    function createTestClient(): PotoClient {
+        const mockStorage = {
+            getItem: (key: string): string | null => null,
+            setItem: (key: string, value: string): void => { },
+            removeItem: (key: string): void => { }
+        };
+        return new PotoClient(serverUrl, mockStorage);
+    }
 
     beforeAll(async () => {
         console.log(`Starting server on port ${testPort} (CI: ${process.env.CI})`);
@@ -83,14 +91,8 @@ describe("Context Isolation Tests", () => {
             await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
 
-        // Create mock storage for testing
-        const mockStorage = {
-            getItem: (key: string): string | null => null,
-            setItem: (key: string, value: string): void => { },
-            removeItem: (key: string): void => { }
-        };
-        client = new PotoClient(serverUrl, mockStorage);
-        console.log("Client created successfully");
+        // Client will be created per-test in beforeEach for better isolation
+        console.log("Server ready, client will be created per-test");
     });
 
     afterAll(async () => {
@@ -104,6 +106,9 @@ describe("Context Isolation Tests", () => {
     beforeEach(async () => {
         // Add small delay to prevent test interference
         await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Create a fresh client for each test to prevent concurrent test interference
+        client = createTestClient();
 
         // Login as visitor for each test
         try {

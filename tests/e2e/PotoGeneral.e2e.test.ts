@@ -16,7 +16,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     // Increase timeout for CI environment
     const timeout = process.env.CI ? 30000 : 10000; // 30s in CI, 10s locally
     let server: PotoServer;
-    let client: PotoClient;
+    let client: PotoClient; // This will be created per-test in beforeEach
     let serverUrl: string;
     const testPort = getRandomPort(); // Use random port to avoid conflicts
 
@@ -24,6 +24,14 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
         return theClient.getProxy<TestGeneratorModule>(TestGeneratorModule.name);
     }
 
+    function createTestClient(): PotoClient {
+        const mockStorage = {
+            getItem: (key: string): string | null => null,
+            setItem: (key: string, value: string): void => { },
+            removeItem: (key: string): void => { }
+        };
+        return new PotoClient(serverUrl, mockStorage);
+    }
 
     beforeAll(async () => {
         // Create and start the server
@@ -84,13 +92,7 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
             await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
 
-        // Create mock storage for testing
-        const mockStorage = {
-            getItem: (key: string): string | null => null,
-            setItem: (key: string, value: string): void => { },
-            removeItem: (key: string): void => { }
-        };
-        client = new PotoClient(serverUrl, mockStorage);
+        // Client will be created per-test in beforeEach for better isolation
     });
 
     afterAll(async () => {
@@ -103,6 +105,9 @@ describe("PotoClient + PotoServer E2E Integration Tests", () => {
     beforeEach(async () => {
         // Add small delay to prevent test interference
         await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Create a fresh client for each test to prevent concurrent test interference
+        client = createTestClient();
 
         // Login as visitor for each test
         try {

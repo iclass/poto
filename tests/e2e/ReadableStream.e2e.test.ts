@@ -15,15 +15,22 @@ describe("ReadableStream Method Tests", () => {
     // Increase timeout for CI environment
     const timeout = process.env.CI ? 30000 : 10000; // 30s in CI, 10s locally
     let server: PotoServer;
-    let client: PotoClient;
+    let client: PotoClient; // This will be created per-test in beforeEach
     let serverUrl: string;
     const testPort = getRandomPort(); // Use random port to avoid conflicts
-
 
     function makeProxy(theClient: PotoClient) {
         return theClient.getProxy<TestGeneratorModule>(TestGeneratorModule.name);
     }
 
+    function createTestClient(): PotoClient {
+        const mockStorage = {
+            getItem: (key: string): string | null => null,
+            setItem: (key: string, value: string): void => { },
+            removeItem: (key: string): void => { }
+        };
+        return new PotoClient(serverUrl, mockStorage);
+    }
 
     beforeAll(async () => {
         console.log(`Starting server on port ${testPort} (CI: ${process.env.CI})`);
@@ -88,14 +95,8 @@ describe("ReadableStream Method Tests", () => {
             await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
 
-        // Create mock storage for testing
-        const mockStorage = {
-            getItem: (key: string): string | null => null,
-            setItem: (key: string, value: string): void => { },
-            removeItem: (key: string): void => { }
-        };
-        client = new PotoClient(serverUrl, mockStorage);
-        console.log("Client created successfully");
+        // Client will be created per-test in beforeEach for better isolation
+        console.log("Server ready, client will be created per-test");
     });
 
     afterAll(async () => {
@@ -109,6 +110,9 @@ describe("ReadableStream Method Tests", () => {
     beforeEach(async () => {
         // Add small delay to prevent test interference
         await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Create a fresh client for each test to prevent concurrent test interference
+        client = createTestClient();
 
         // Login as visitor for each test
         try {
@@ -383,7 +387,9 @@ describe("ReadableStream Method Tests", () => {
 
         console.log("\n🎵 Testing pure binary audio streaming (no SSE overhead)...");
         
-        const stream = await testGeneratorProxy.postPureBinaryStream_("audio");
+        const chunkSize = 40_000;
+        const totalChunks = 10;
+        const stream = await testGeneratorProxy.postPureBinaryStream_("audio", chunkSize, totalChunks);
         expect(stream).toBeInstanceOf(ReadableStream);
 
         const binaryChunks: Uint8Array[] = [];
@@ -414,7 +420,7 @@ describe("ReadableStream Method Tests", () => {
         
         // Verify we received binary chunks (may be coalesced)
         expect(binaryChunks.length).toBeGreaterThan(0);
-        expect(totalBytesReceived).toBe(10 * 4096); // 10 chunks * 4096 bytes = ~40KB
+        expect(totalBytesReceived).toBe(chunkSize * totalChunks); // 10 chunks * 4096 bytes = ~40KB
 
         // Verify binary data pattern (should be sine wave pattern)
         const firstChunk = binaryChunks[0];
@@ -432,8 +438,9 @@ describe("ReadableStream Method Tests", () => {
 
         console.log("\n🎬 Starting 10MB video binary streaming test...");
         const startTime = performance.now();
-        
-        const stream = await testGeneratorProxy.postPureBinaryStream_("video");
+        const chunkSize = 40_000;
+        const totalChunks = 2560;
+        const stream = await testGeneratorProxy.postPureBinaryStream_("video", chunkSize, totalChunks);
         expect(stream).toBeInstanceOf(ReadableStream);
 
         let chunkCount = 0;
@@ -485,7 +492,7 @@ describe("ReadableStream Method Tests", () => {
         console.log(`  ✓ Average chunk time: ${(elapsedSeconds * 1000 / chunkCount).toFixed(3)} ms\n`);
 
         // Verify we received exactly 10MB (chunks may be coalesced by the streaming pipeline)
-        expect(totalBytesReceived).toBe(10 * 1024 * 1024); // Exactly 10MB
+        expect(totalBytesReceived).toBe(chunkSize * totalChunks); // Exactly 10MB
         expect(chunkCount).toBeGreaterThan(0); // At least 1 chunk
         expect(chunkCount).toBeLessThanOrEqual(2560); // At most the original chunk count
 
