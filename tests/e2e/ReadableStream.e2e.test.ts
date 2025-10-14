@@ -397,12 +397,17 @@ describe("ReadableStream Method Tests", () => {
             const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Stream timeout')), 5000));
 
             const readStream = async () => {
+                let firstChunk = true;
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
-                    // Raw binary data (not SSE formatted)
-                    expect(value).toBeInstanceOf(Uint8Array);
+                    // Only verify first chunk type (not in hot loop)
+                    if (firstChunk) {
+                        expect(value).toBeInstanceOf(Uint8Array);
+                        firstChunk = false;
+                    }
+                    
                     binaryChunks.push(value);
                     totalBytesReceived += value.length;
                 }
@@ -449,12 +454,17 @@ describe("ReadableStream Method Tests", () => {
             const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Stream timeout')), 3000)); // 3s timeout for 10MB
 
             const readStream = async () => {
+                let firstChunk = true;
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
-                    // Raw binary data (not SSE formatted)
-                    expect(value).toBeInstanceOf(Uint8Array);
+                    // Only verify first chunk type (not in hot loop)
+                    if (firstChunk) {
+                        expect(value).toBeInstanceOf(Uint8Array);
+                        firstChunk = false;
+                    }
+                    
                     chunkCount++;
                     totalBytesReceived += value.length;
                     
@@ -465,7 +475,7 @@ describe("ReadableStream Method Tests", () => {
                         const currentTime = performance.now();
                         const elapsedSeconds = (currentTime - startTime) / 1000;
                         const throughputMBps = currentMB / elapsedSeconds;
-                        console.log(`  📊 Progress: ${currentMB.toFixed(2)} MB | Throughput: ${throughputMBps.toFixed(2)} MB/s | Chunks: ${chunkCount}`);
+                        // console.log(`  📊 Progress: ${currentMB.toFixed(2)} MB | Throughput: ${throughputMBps.toFixed(2)} MB/s | Chunks: ${chunkCount}`);
                     }
                 }
             };

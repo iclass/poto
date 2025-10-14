@@ -24,11 +24,11 @@ export class TestGeneratorModule extends PotoModule {
     async *postErrorGenerator_(shouldError: boolean): AsyncGenerator<{ status: string; userId: string | undefined; data?: string; }> {
         const user = await this.getCurrentUser();
         yield { status: "started", userId: user?.id };
-        
+
         if (shouldError) {
             throw new Error("Generator error occurred as expected");
         }
-        
+
         yield { status: "processing", data: "some data", userId: user?.id };
         yield { status: "completed", userId: user?.id };
     }
@@ -64,10 +64,10 @@ export class TestGeneratorModule extends PotoModule {
     async *streamData_(items: string[]): AsyncGenerator<{ item: string; processed: string; userId: string | undefined }> {
         const user = await this.getCurrentUser();
         for (const item of items) {
-            yield { 
-                item, 
-                processed: item.toUpperCase(), 
-                userId: user?.id 
+            yield {
+                item,
+                processed: item.toUpperCase(),
+                userId: user?.id
             };
             await new Promise(resolve => setTimeout(resolve, 5));
         }
@@ -77,7 +77,7 @@ export class TestGeneratorModule extends PotoModule {
         const user = await this.getCurrentUser();
         for (let i = 0; i < steps; i++) {
             const progress = Math.round(((i + 1) / steps) * 100);
-            
+
             yield {
                 type: "progress",
                 step: i + 1,
@@ -86,10 +86,10 @@ export class TestGeneratorModule extends PotoModule {
                 message: `Processing step ${i + 1} of ${steps}`,
                 userId: user?.id
             };
-            
+
             await new Promise(resolve => setTimeout(resolve, 10));
         }
-        
+
         yield {
             type: "complete",
             message: "All steps completed successfully!",
@@ -124,7 +124,7 @@ export class TestGeneratorModule extends PotoModule {
         const user = await this.getCurrentUser()
         // Simulate LLM thinking time
         await new Promise(resolve => setTimeout(resolve, 50));
-        
+
         // Generate a mock response based on the prompt
         const responses = {
             "hello": "Hello! How can I help you today?",
@@ -133,7 +133,7 @@ export class TestGeneratorModule extends PotoModule {
             "math": "Let me solve that for you. The answer is 42, which is the meaning of life, the universe, and everything.",
             "weather": "I can't check the weather in real-time, but I can help you understand weather patterns and climate science."
         };
-        
+
         // Find the best matching response
         let response = "I understand your question. Let me provide a helpful response.";
         for (const [key, value] of Object.entries(responses)) {
@@ -142,24 +142,24 @@ export class TestGeneratorModule extends PotoModule {
                 break;
             }
         }
-        
+
         // Stream the response character by character to simulate real LLM streaming
         const words = response.split(' ');
         for (let i = 0; i < words.length; i++) {
             const word = words[i];
             const isLastWord = i === words.length - 1;
-            
+
             yield {
                 type: 'content',
                 content: word + (isLastWord ? '' : ' '),
                 timestamp: new Date().toISOString(),
                 userId: user?.id
             };
-            
+
             // Simulate realistic typing speed (10-30ms per word for faster testing)
             await new Promise(resolve => setTimeout(resolve, 10 + Math.random() * 20));
         }
-        
+
         // Send completion signal
         yield {
             type: 'done',
@@ -187,7 +187,7 @@ export class TestGeneratorModule extends PotoModule {
         const totalWords = 20; // Simulate a longer response
         let chunksReceived = 0;
         let contentLength = 0;
-        
+
         // Start progress
         yield {
             type: 'progress',
@@ -197,26 +197,26 @@ export class TestGeneratorModule extends PotoModule {
             timestamp: new Date().toISOString(),
             userId: user?.id
         };
-        
+
         // Generate mock content
         const words = [
             "This", "is", "a", "mock", "LLM", "response", "that", "simulates",
             "real", "streaming", "behavior", "with", "progress", "tracking",
             "to", "test", "the", "complete", "pipeline", "end-to-end"
         ];
-        
+
         for (let i = 0; i < words.length; i++) {
             const word = words[i];
             chunksReceived++;
             contentLength += word.length + 1; // +1 for space
-            
+
             yield {
                 type: 'content',
                 content: word + (i === words.length - 1 ? '' : ' '),
                 timestamp: new Date().toISOString(),
                 userId: user?.id
             };
-            
+
             // Send progress update every 5 words
             if (chunksReceived % 5 === 0) {
                 const progress = Math.round((chunksReceived / totalWords) * 100);
@@ -229,10 +229,10 @@ export class TestGeneratorModule extends PotoModule {
                     userId: user?.id
                 };
             }
-            
+
             await new Promise(resolve => setTimeout(resolve, 5 + Math.random() * 15));
         }
-        
+
         // Final completion
         yield {
             type: 'complete',
@@ -250,7 +250,7 @@ export class TestGeneratorModule extends PotoModule {
     async postReadableStream_(message: string): Promise<ReadableStream<Uint8Array>> {
         const user = await this.getCurrentUser()
         const encoder = new TextEncoder();
-        
+
         return new ReadableStream({
             async start(controller) {
                 try {
@@ -261,12 +261,12 @@ export class TestGeneratorModule extends PotoModule {
                         userId: user?.id,
                         timestamp: new Date().toISOString()
                     })}\n\n`));
-                    
+
                     // Simulate processing with multiple chunks
                     const words = message.split(' ');
                     for (let i = 0; i < words.length; i++) {
                         await new Promise(resolve => setTimeout(resolve, 10));
-                        
+
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                             type: 'chunk',
                             index: i,
@@ -276,7 +276,7 @@ export class TestGeneratorModule extends PotoModule {
                             timestamp: new Date().toISOString()
                         })}\n\n`));
                     }
-                    
+
                     // Send completion
                     controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                         type: 'complete',
@@ -285,7 +285,7 @@ export class TestGeneratorModule extends PotoModule {
                         userId: user?.id,
                         timestamp: new Date().toISOString()
                     })}\n\n`));
-                    
+
                     controller.close();
                 } catch (error) {
                     controller.error(error);
@@ -300,7 +300,7 @@ export class TestGeneratorModule extends PotoModule {
     async postBinaryStream_(filename: string): Promise<ReadableStream<Uint8Array>> {
         const user = await this.getCurrentUser()
         const encoder = new TextEncoder();
-        
+
         return new ReadableStream({
             async start(controller) {
                 try {
@@ -312,20 +312,20 @@ export class TestGeneratorModule extends PotoModule {
                         userId: user?.id,
                         timestamp: new Date().toISOString()
                     })}\n\n`));
-                    
+
                     // Simulate file chunks
                     const chunkSize = 256;
                     const totalChunks = 4;
-                    
+
                     for (let i = 0; i < totalChunks; i++) {
                         await new Promise(resolve => setTimeout(resolve, 20));
-                        
+
                         // Create mock binary data
                         const chunkData = new Uint8Array(chunkSize);
                         for (let j = 0; j < chunkSize; j++) {
                             chunkData[j] = (i * chunkSize + j) % 256;
                         }
-                        
+
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                             type: 'binary_chunk',
                             index: i,
@@ -336,7 +336,7 @@ export class TestGeneratorModule extends PotoModule {
                             timestamp: new Date().toISOString()
                         })}\n\n`));
                     }
-                    
+
                     // Send completion
                     controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                         type: 'complete',
@@ -345,7 +345,7 @@ export class TestGeneratorModule extends PotoModule {
                         userId: user?.id,
                         timestamp: new Date().toISOString()
                     })}\n\n`));
-                    
+
                     controller.close();
                 } catch (error) {
                     controller.error(error);
@@ -359,42 +359,44 @@ export class TestGeneratorModule extends PotoModule {
      * This streams raw binary data directly without SSE formatting
      */
     async postPureBinaryStream_(fileType: 'audio' | 'video', chunkSize: number = 4096, totalChunks: number = 10): Promise<ReadableStream<Uint8Array>> {
-        
+
         // Simulate audio/video file streaming with pure binary data
         // Audio: ~40KB (10 chunks), Video: 10MB (2560 chunks)
         const totalSize = chunkSize * totalChunks;
+
+        // Pre-generate chunk data for maximum throughput (avoid per-chunk allocation overhead)
+        // This simulates real-world scenarios like reading from a pre-loaded file buffer
+        const templateChunk = new Uint8Array(chunkSize);
+        if (fileType === 'audio') {
+            // Simulate audio waveform data (sine wave pattern) - only generate once
+            for (let j = 0; j < chunkSize; j++) {
+                const sample = Math.sin(j * 0.01) * 127 + 128;
+                templateChunk[j] = Math.floor(sample);
+            }
+        } else {
+            // Simulate video frame data - use fastest pattern (repeating sequence)
+            for (let j = 0; j < chunkSize; j++) {
+                templateChunk[j] = j % 256;
+            }
+        }
 
         const stream = new ReadableStream<Uint8Array>({
             async start(controller) {
                 try {
                     for (let i = 0; i < totalChunks; i++) {
-                        // Reduce delay for video to avoid timeout with large size
+                        // Optional delay for audio to simulate realistic streaming
                         const delay = fileType === 'audio' ? 10 : 0;
                         if (delay > 0) {
                             await new Promise(resolve => setTimeout(resolve, delay));
                         }
-                        
-                        // Create realistic binary data patterns
-                        const chunkData = new Uint8Array(chunkSize);
-                        
-                        if (fileType === 'audio') {
-                            // Simulate audio waveform data (sine wave pattern)
-                            for (let j = 0; j < chunkSize; j++) {
-                                const sample = Math.sin((i * chunkSize + j) * 0.01) * 127 + 128;
-                                chunkData[j] = Math.floor(sample);
-                            }
-                        } else {
-                            // Simulate video frame data (gradient pattern)
-                            for (let j = 0; j < chunkSize; j++) {
-                                const pattern = ((i * chunkSize + j) * 13) % 256; // Pseudo-random pattern
-                                chunkData[j] = pattern;
-                            }
-                        }
-                        
+
+                        // Create new chunk from template (fast copy)
+                        const chunkData = new Uint8Array(templateChunk);
+
                         // Stream pure binary data directly (no JSON wrapping)
                         controller.enqueue(chunkData);
                     }
-                    
+
                     controller.close();
                 } catch (error) {
                     controller.error(error);
@@ -404,5 +406,13 @@ export class TestGeneratorModule extends PotoModule {
 
         // Return stream directly - PotoServer will detect binary content and handle appropriately
         return stream;
+    }
+
+    async getVideoStream(): Promise<ReadableStream<Uint8Array>> {
+        const context = this.getRequestContext();
+        if (context) {
+            context.responseHeaders.set('Content-Type', 'video/mp4');
+        }
+        return Bun.file('demoapp/public/Barron_1100_words_HEVC_hw.mp4').stream();
     }
 }

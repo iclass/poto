@@ -421,7 +421,11 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 				yield decoder.decode(value, { stream: true });
 			}
 		} finally {
-			reader.releaseLock();
+			try {
+				if (reader && typeof (reader as any).releaseLock === 'function') {
+					(reader as any).releaseLock();
+				}
+			} catch (_e) {}
 		}
 	}
 
@@ -479,7 +483,11 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 				}
 			}
 		} finally {
-			reader.releaseLock();
+			try {
+				if (reader && typeof (reader as any).releaseLock === 'function') {
+					(reader as any).releaseLock();
+				}
+			} catch (_e) {}
 		}
 	}
 
