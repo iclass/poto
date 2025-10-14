@@ -184,16 +184,22 @@ export class PotoServer {
 
 	private async serveStaticFile(filePath: string, req: Request): Promise<Response> {
 		try {
+			// SECURITY: Detect path traversal attempts BEFORE normalization
+			// Block any path containing ../ or ..\ patterns
+			if (filePath.includes('..')) {
+				console.warn(`⚠️ Path traversal attempt blocked: ${filePath}`);
+				return new Response("Forbidden", { status: 403 });
+			}
+			
 			// SECURITY: Normalize and validate path to prevent directory traversal attacks
-			// Remove any leading ../ patterns that could escape the static directory
-			const normalizedPath = path.normalize(filePath).replace(/^(\.\.[\/\\])+/, '');
+			const normalizedPath = path.normalize(filePath);
 			const resolvedPath = path.resolve(this.staticDir, normalizedPath);
 			const staticDirResolved = path.resolve(this.staticDir);
 			
-			// SECURITY: Ensure resolved path is within staticDir (prevents path traversal)
-			// Example attack blocked: GET /../../../../../../etc/passwd.jpg
-			if (!resolvedPath.startsWith(staticDirResolved)) {
-				console.warn(`⚠️ Path traversal attempt blocked: ${filePath}`);
+			// SECURITY: Double-check that resolved path is within staticDir
+			// This catches any edge cases that might bypass the initial check
+			if (!resolvedPath.startsWith(staticDirResolved + path.sep) && resolvedPath !== staticDirResolved) {
+				console.warn(`⚠️ Path traversal attempt blocked (post-resolution): ${filePath}`);
 				return new Response("Forbidden", { status: 403 });
 			}
 			

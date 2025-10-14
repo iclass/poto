@@ -44,10 +44,15 @@ describe("PotoServer serveStaticFile Tests", () => {
 		const resolvedPath = path.join(staticDir, mockFilePath);
 		const mockMimeType = mime.getType(resolvedPath) || "application/octet-stream";
 
-		const response = await potoServer["serveStaticFile"](mockFilePath);
+		// Create a mock Request object
+		const mockReq = new Request("http://localhost/testFile.txt");
+
+		const response = await potoServer["serveStaticFile"](mockFilePath, mockReq);
 
 		expect(response.status).toBe(200);
 		expect(response.headers.get("Content-Type")).toBe(mockMimeType);
+		expect(response.headers.get("ETag")).toBeDefined();
+		expect(response.headers.get("Cache-Control")).toBe("public, max-age=31536000, immutable");
 		const responseText = await response.text();
 		expect(responseText.trim()).toBe("Hello, this is a test file");
 	});
@@ -55,7 +60,10 @@ describe("PotoServer serveStaticFile Tests", () => {
 	test("should return 404 for a file that does not exist", async () => {
 		const mockFilePath = "nonExistentFile.txt";
 
-		const response = await potoServer["serveStaticFile"](mockFilePath);
+		// Create a mock Request object
+		const mockReq = new Request("http://localhost/nonExistentFile.txt");
+
+		const response = await potoServer["serveStaticFile"](mockFilePath, mockReq);
 
 		expect(response.status).toBe(404);
 		const responseText = await response.text();
@@ -66,13 +74,16 @@ describe("PotoServer serveStaticFile Tests", () => {
 		// Create a file with invalid characters in the path to trigger an error
 		const mockFilePath = "errorFile.txt";
 		
+		// Create a mock Request object
+		const mockReq = new Request("http://localhost/errorFile.txt");
+		
 		// Mock Bun.file to throw an error
 		const originalBunFile = Bun.file;
 		(Bun as any).file = () => {
 			throw new Error("Unexpected error");
 		};
 
-		const response = await potoServer["serveStaticFile"](mockFilePath);
+		const response = await potoServer["serveStaticFile"](mockFilePath, mockReq);
 
 		expect(response.status).toBe(500);
 		const responseText = await response.text();
@@ -80,6 +91,49 @@ describe("PotoServer serveStaticFile Tests", () => {
 
 		// Restore original Bun.file
 		(Bun as any).file = originalBunFile;
+	});
+
+	test("should return 304 Not Modified when If-None-Match matches ETag", async () => {
+		const mockFilePath = "testFile.txt";
+
+		// First request to get the ETag
+		const mockReq1 = new Request("http://localhost/testFile.txt");
+		const response1 = await potoServer["serveStaticFile"](mockFilePath, mockReq1);
+		const etag = response1.headers.get("ETag");
+
+		expect(etag).toBeDefined();
+
+		// Second request with If-None-Match header
+		const mockReq2 = new Request("http://localhost/testFile.txt", {
+			headers: { "If-None-Match": etag! }
+		});
+		const response2 = await potoServer["serveStaticFile"](mockFilePath, mockReq2);
+
+		expect(response2.status).toBe(304);
+		expect(response2.headers.get("ETag")).toBe(etag);
+		expect(response2.headers.get("Cache-Control")).toBe("public, max-age=31536000, immutable");
+	});
+
+	test("should block path traversal attempts", async () => {
+		const mockFilePath = "../../etc/passwd";
+		const mockReq = new Request("http://localhost/../../etc/passwd");
+
+		const response = await potoServer["serveStaticFile"](mockFilePath, mockReq);
+
+		expect(response.status).toBe(403);
+		const responseText = await response.text();
+		expect(responseText).toBe("Forbidden");
+	});
+
+	test("should block path traversal with encoded characters", async () => {
+		const mockFilePath = "..%2F..%2Fetc%2Fpasswd";
+		const mockReq = new Request("http://localhost/..%2F..%2Fetc%2Fpasswd");
+
+		const response = await potoServer["serveStaticFile"](mockFilePath, mockReq);
+
+		expect(response.status).toBe(403);
+		const responseText = await response.text();
+		expect(responseText).toBe("Forbidden");
 	});
 });
 
