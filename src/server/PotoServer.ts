@@ -182,24 +182,63 @@ export class PotoServer {
 		// this.handlers[module.getRoute()] = routeHandler
 	}
 
-	private async serveStaticFile(filePath: string): Promise<Response> {
+	private async serveStaticFile(filePath: string, req: Request): Promise<Response> {
 		try {
-			const resolvedPath = path.join(this.staticDir, filePath);
+			// SECURITY: Normalize and validate path to prevent directory traversal attacks
+			// Remove any leading ../ patterns that could escape the static directory
+			const normalizedPath = path.normalize(filePath).replace(/^(\.\.[\/\\])+/, '');
+			const resolvedPath = path.resolve(this.staticDir, normalizedPath);
+			const staticDirResolved = path.resolve(this.staticDir);
+			
+			// SECURITY: Ensure resolved path is within staticDir (prevents path traversal)
+			// Example attack blocked: GET /../../../../../../etc/passwd.jpg
+			if (!resolvedPath.startsWith(staticDirResolved)) {
+				console.warn(`⚠️ Path traversal attempt blocked: ${filePath}`);
+				return new Response("Forbidden", { status: 403 });
+			}
+			
 			const file = Bun.file(resolvedPath);
 			
-			// Check if file exists by checking its size
-			// Bun.file() returns size 0 for non-existent files
-			if (file.size === 0) {
+			// SECURITY: Proper file existence check (handles empty files correctly)
+			const exists = await file.exists();
+			if (!exists) {
 				return new Response("File not found", { status: 404 });
 			}
 			
 			const contentType = mime.getType(resolvedPath) || "application/octet-stream";
 			
+			// Generate ETag based on file size and last modified time
+			const etag = `"${file.size}-${file.lastModified}"`;
+			
+			// PERFORMANCE: Check If-None-Match header for conditional requests
+			// Return 304 Not Modified if ETag matches (saves bandwidth)
+			const ifNoneMatch = req.headers.get("If-None-Match");
+			if (ifNoneMatch === etag) {
+				return new Response(null, {
+					status: 304,
+					headers: {
+						"ETag": etag,
+						"Cache-Control": "public, max-age=31536000, immutable",
+					},
+				});
+			}
+			
+			// PERFORMANCE: Add caching headers for better client-side caching
+			// Static assets can be cached aggressively since they don't change
+			const headers: HeadersInit = {
+				"Content-Type": contentType,
+				// Cache for 1 year for immutable assets (adjust max-age as needed)
+				"Cache-Control": "public, max-age=31536000, immutable",
+				// Simple ETag based on file size and last modified time
+				"ETag": etag,
+			};
+			
 			return new Response(file, {
 				status: 200,
-				headers: { "Content-Type": contentType },
+				headers,
 			});
 		} catch (error) {
+			console.error("Static file serving error:", error);
 			if (error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT") {
 				return new Response("File not found", { status: 404 });
 			}
@@ -490,7 +529,7 @@ export class PotoServer {
 
 				if (this.isStaticFileRequest(pathname, req.method)) {
 					const filePath = pathname.slice(1);
-					const r = await this.serveStaticFile(filePath);
+					const r = await this.serveStaticFile(filePath, req);
 					return r
 				}
 

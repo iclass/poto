@@ -18,7 +18,7 @@ async function startServer() {
     const server = new PotoServer({
         port: Constants.port,
         jwtSecret: 'demo-secret-key',
-        staticDir: '/public', // Serve static files from current directory
+        staticDir: 'public', // Serve static files from public directory
         routes: {
             '/': indexhtml,
             '/3': index3html,

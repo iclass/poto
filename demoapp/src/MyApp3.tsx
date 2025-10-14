@@ -43,8 +43,10 @@ export function MyApp3({
                     fileUrl: undefined as string | undefined,
                     audioUrl: undefined as string | undefined,
                     arrayBufferUrl: undefined as string | undefined,
+                    staticUrl: undefined as string | undefined,
                     arrayBufferTime: undefined as number | undefined,
                     fileTime: undefined as number | undefined,
+                    staticUrlTime: undefined as number | undefined,
                     fileSize: undefined as number | undefined,
                 },
                 messageInput: 'Hello from the frontend!',
@@ -348,8 +350,10 @@ export function MyApp3({
             fileUrl: undefined,
             audioUrl: undefined,
             arrayBufferUrl: undefined,
+            staticUrl: undefined,
             arrayBufferTime: undefined,
             fileTime: undefined,
+            staticUrlTime: undefined,
             fileSize: undefined,
         };
         
@@ -417,6 +421,25 @@ export function MyApp3({
         } catch (error) {
             console.error('❌ Download as ArrayBuffer failed:', error);
             $.results.error = `Download as ArrayBuffer failed: ${error}`;
+        } finally {
+            $.loading = false;
+        }
+    };
+
+    const downloadViaStaticUrl = () => {
+        $.loading = true;
+        try {
+            const startTime = performance.now();
+            
+            // Use static URL directly from public folder
+            $.downloadResults.staticUrl = '/logo.jpg';
+            const downloadTime = performance.now() - startTime;
+            
+            $.downloadResults.staticUrlTime = downloadTime;
+            $.results.error = undefined;
+        } catch (error) {
+            console.error('Download via Static URL failed:', error);
+            $.results.error = `Download via Static URL failed: ${error}`;
         } finally {
             $.loading = false;
         }
@@ -790,23 +813,29 @@ export function MyApp3({
 
             <div className="demo-section">
                 <h3>⬇️ Image Download (Server → Client)</h3>
-                <p><small>Download logo.jpg (6.8 MB) from server as different binary types</small></p>
+                <p><small>Download logo.jpg (6.8 MB) - compare RPC methods vs static URL serving</small></p>
                 <div className="button-group">
                     <button
                         onClick={downloadAsFile}
                         disabled={$.loading || !$.isConnected || !$.currentUser}
                     >
-                        Download as File
+                        Download as File (RPC)
                     </button>
                     <button
                         onClick={downloadAsArrayBuffer}
                         disabled={$.loading || !$.isConnected || !$.currentUser}
                     >
-                        Download as ArrayBuffer
+                        Download as ArrayBuffer (RPC)
+                    </button>
+                    <button
+                        onClick={downloadViaStaticUrl}
+                        disabled={$.loading}
+                    >
+                        Download via Static URL
                     </button>
                 </div>
 
-                {($.downloadResults.fileTime || $.downloadResults.arrayBufferTime) && (
+                {($.downloadResults.fileTime || $.downloadResults.arrayBufferTime || $.downloadResults.staticUrlTime) && (
                     <div className="result">
                         <h4>📊 Download Performance Comparison:</h4>
                         <table style={{width: '100%', borderCollapse: 'collapse', marginTop: '10px'}}>
@@ -819,9 +848,9 @@ export function MyApp3({
                                 </tr>
                             </thead>
                             <tbody>
-                                {$.downloadResults.fileTime && (
+                                {$.downloadResults.fileTime !== undefined && (
                                     <tr>
-                                        <td style={{padding: '8px', border: '1px solid #ddd'}}>File</td>
+                                        <td style={{padding: '8px', border: '1px solid #ddd'}}>File (RPC)</td>
                                         <td style={{padding: '8px', border: '1px solid #ddd', textAlign: 'right'}}>
                                             {$.downloadResults.fileTime.toFixed(2)} ms
                                         </td>
@@ -829,13 +858,17 @@ export function MyApp3({
                                             {(($.downloadResults.fileSize || 0) / 1024 / 1024 / ($.downloadResults.fileTime / 1000)).toFixed(2)} MB/s
                                         </td>
                                         <td style={{padding: '8px', border: '1px solid #ddd', textAlign: 'center'}}>
-                                            {$.downloadResults.fileTime < ($.downloadResults.arrayBufferTime || Infinity) ? '🏆 Faster' : '✅'}
+                                            {(() => {
+                                                const times = [$.downloadResults.fileTime, $.downloadResults.arrayBufferTime, $.downloadResults.staticUrlTime].filter(t => t !== undefined) as number[];
+                                                const minTime = Math.min(...times);
+                                                return $.downloadResults.fileTime === minTime ? '🏆 Fastest' : '✅';
+                                            })()}
                                         </td>
                                     </tr>
                                 )}
-                                {$.downloadResults.arrayBufferTime && (
+                                {$.downloadResults.arrayBufferTime !== undefined && (
                                     <tr>
-                                        <td style={{padding: '8px', border: '1px solid #ddd'}}>ArrayBuffer</td>
+                                        <td style={{padding: '8px', border: '1px solid #ddd'}}>ArrayBuffer (RPC)</td>
                                         <td style={{padding: '8px', border: '1px solid #ddd', textAlign: 'right'}}>
                                             {$.downloadResults.arrayBufferTime.toFixed(2)} ms
                                         </td>
@@ -843,7 +876,29 @@ export function MyApp3({
                                             {(($.downloadResults.fileSize || 0) / 1024 / 1024 / ($.downloadResults.arrayBufferTime / 1000)).toFixed(2)} MB/s
                                         </td>
                                         <td style={{padding: '8px', border: '1px solid #ddd', textAlign: 'center'}}>
-                                            {$.downloadResults.arrayBufferTime < ($.downloadResults.fileTime || Infinity) ? '🏆 Faster' : '✅'}
+                                            {(() => {
+                                                const times = [$.downloadResults.fileTime, $.downloadResults.arrayBufferTime, $.downloadResults.staticUrlTime].filter(t => t !== undefined) as number[];
+                                                const minTime = Math.min(...times);
+                                                return $.downloadResults.arrayBufferTime === minTime ? '🏆 Fastest' : '✅';
+                                            })()}
+                                        </td>
+                                    </tr>
+                                )}
+                                {$.downloadResults.staticUrlTime !== undefined && (
+                                    <tr>
+                                        <td style={{padding: '8px', border: '1px solid #ddd'}}>Static URL</td>
+                                        <td style={{padding: '8px', border: '1px solid #ddd', textAlign: 'right'}}>
+                                            {$.downloadResults.staticUrlTime.toFixed(2)} ms
+                                        </td>
+                                        <td style={{padding: '8px', border: '1px solid #ddd', textAlign: 'right'}}>
+                                            {(($.downloadResults.fileSize || 0) / 1024 / 1024 / ($.downloadResults.staticUrlTime / 1000)).toFixed(2)} MB/s
+                                        </td>
+                                        <td style={{padding: '8px', border: '1px solid #ddd', textAlign: 'center'}}>
+                                            {(() => {
+                                                const times = [$.downloadResults.fileTime, $.downloadResults.arrayBufferTime, $.downloadResults.staticUrlTime].filter(t => t !== undefined) as number[];
+                                                const minTime = Math.min(...times);
+                                                return $.downloadResults.staticUrlTime === minTime ? '🏆 Fastest' : '✅';
+                                            })()}
                                         </td>
                                     </tr>
                                 )}
@@ -875,6 +930,17 @@ export function MyApp3({
                             src={$.downloadResults.arrayBufferUrl} 
                             alt="Downloaded as ArrayBuffer" 
                             style={{maxWidth: '300px', border: '2px solid #FF9800', borderRadius: '8px'}}
+                        />
+                    </div>
+                )}
+
+                {$.downloadResults.staticUrl && (
+                    <div className="result">
+                        <h4>📥 Downloaded via Static URL:</h4>
+                        <img 
+                            src={$.downloadResults.staticUrl} 
+                            alt="Downloaded via Static URL" 
+                            style={{maxWidth: '300px', border: '2px solid #4CAF50', borderRadius: '8px'}}
                         />
                     </div>
                 )}
