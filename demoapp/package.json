@@ -1,6 +1,6 @@
 {
   "name": "poto-demo-app",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Minimal demo application showcasing Poto framework",
   "type": "module",
   "main": "src/server.ts",
@@ -15,7 +15,7 @@
     "poto:status": "if [ -L node_modules/poto ]; then echo '🔧 DEV mode: symlink to' && readlink node_modules/poto; else echo '📦 PROD mode: installed package'; fi"
   },
   "dependencies": {
-    "poto": "https://github.com/iclass/poto/releases/download/v1.1.1/poto.tar.gz",
+    "poto": "https://github.com/iclass/poto/releases/download/v1.1.2/poto.tar.gz",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "valtio": "^2.1.8"
