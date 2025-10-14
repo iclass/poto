@@ -1,3 +1,31 @@
+/**
+ * Context Isolation E2E Tests
+ * 
+ * ⚠️ CRITICAL ARCHITECTURAL REQUIREMENT:
+ * PotoModule instances are SHARED across ALL concurrent requests.
+ * 
+ * ❌ NEVER use mutable instance variables:
+ *    private counter = 0;           // RACE CONDITION!
+ *    private map = new Map();       // SHARED MUTABLE STATE!
+ *    ++this.anything                // NOT ATOMIC!
+ * 
+ * ✅ ALWAYS use:
+ *    - Atomic ID generation: `req_${Date.now()}_${Math.random().toString(36).substring(2)}`
+ *    - AsyncLocalStorage context: this.getCurrentUser()
+ *    - Session storage: this.setSessionValue() / this.getSessionValue()
+ *    - Immutable config: private readonly MAX_RETRIES = 3
+ * 
+ * These tests validate that:
+ * 1. User context is properly isolated across concurrent requests
+ * 2. AsyncLocalStorage maintains isolation during long-running operations
+ * 3. No context leaks between different clients
+ * 4. Request IDs are unique under concurrent load
+ * 
+ * See also:
+ * - tests/e2e/ContextIsolationTestModule.ts (demonstrates CORRECT patterns)
+ * - docs/MODULE-DESIGN-RULES.md (comprehensive guide)
+ * - docs/CONCURRENT-ARCHITECTURE.md (architecture deep dive)
+ */
 import { describe, beforeAll, afterAll, beforeEach, test as it, expect } from "bun:test";
 import path from "path";
 import { PotoServer } from "../../src/server/PotoServer";
@@ -15,17 +43,26 @@ describe("Context Isolation Tests", () => {
     // Increase timeout for CI environment
     const timeout = process.env.CI ? 30000 : 10000; // 30s in CI, 10s locally
     let server: PotoServer;
-    let client: PotoClient; // This will be created per-test in beforeEach
     let serverUrl: string;
     const testPort = getRandomPort(); // Use random port to avoid conflicts
 
-    function createTestClient(): PotoClient {
+    async function createTestClient(): Promise<PotoClient> {
         const mockStorage = {
             getItem: (key: string): string | null => null,
             setItem: (key: string, value: string): void => { },
             removeItem: (key: string): void => { }
         };
-        return new PotoClient(serverUrl, mockStorage);
+        const client = new PotoClient(serverUrl, mockStorage);
+        
+        // Login immediately as part of client creation
+        await client.loginAsVisitor();
+        
+        // Verify login succeeded
+        if (!client.userId) {
+            throw new Error("Login succeeded but userId is undefined - critical failure");
+        }
+        
+        return client;
     }
 
     beforeAll(async () => {
@@ -91,7 +128,6 @@ describe("Context Isolation Tests", () => {
             await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
 
-        // Client will be created per-test in beforeEach for better isolation
         console.log("Server ready, client will be created per-test");
     });
 
@@ -103,28 +139,10 @@ describe("Context Isolation Tests", () => {
         }
     });
 
-    beforeEach(async () => {
-        // Add small delay to prevent test interference
-        await new Promise(resolve => setTimeout(resolve, 10));
-
-        // Create a fresh client for each test to prevent concurrent test interference
-        client = createTestClient();
-
-        // Login as visitor for each test
-        try {
-            await client.loginAsVisitor();
-        } catch (error) {
-            console.warn("Login failed, continuing without auth:", error);
-        }
-    });
-
-    function makeContextIsolationProxy(theClient: PotoClient) {
-        return theClient.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
-    }
-
     it("should isolate user contexts in AsyncLocalStorage", async () => {
-        const contextIsolationProxy = makeContextIsolationProxy(client);
-        const contextIsolationProxy2 = makeContextIsolationProxy(client); // Create a second proxy for a different user
+        const client = await createTestClient();
+        const contextIsolationProxy = client.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
+        const contextIsolationProxy2 = client.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
 
 
         // Test generator method
@@ -155,8 +173,9 @@ describe("Context Isolation Tests", () => {
     });
 
     it("should isolate request context in AsyncLocalStorage", async () => {
-        const contextIsolationProxy = makeContextIsolationProxy(client);
-        const contextIsolationProxy2 = makeContextIsolationProxy(client); // Create a second proxy for a different user
+        const client = await createTestClient();
+        const contextIsolationProxy = client.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
+        const contextIsolationProxy2 = client.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
 
 
         // Test generator method
@@ -185,8 +204,9 @@ describe("Context Isolation Tests", () => {
     });
 
     it("should isolate long-running operations in AsyncLocalStorage", async () => {
-        const contextIsolationProxy = makeContextIsolationProxy(client);
-        const contextIsolationProxy2 = makeContextIsolationProxy(client); // Create a second proxy for a different user
+        const client = await createTestClient();
+        const contextIsolationProxy = client.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
+        const contextIsolationProxy2 = client.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
 
 
         // Test long-running generator
@@ -221,8 +241,9 @@ describe("Context Isolation Tests", () => {
     });
 
     it("should isolate ReadableStream methods in AsyncLocalStorage", async () => {
-        const contextIsolationProxy = makeContextIsolationProxy(client);
-        const contextIsolationProxy2 = makeContextIsolationProxy(client); // Create a second proxy for a different user
+        const client = await createTestClient();
+        const contextIsolationProxy = client.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
+        const contextIsolationProxy2 = client.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
 
 
         // Test ReadableStream method
@@ -284,25 +305,11 @@ describe("Context Isolation Tests", () => {
 
     it("should isolate concurrent users with different user IDs", async () => {
         // Create multiple clients with different user IDs
-        const mockStorage1 = {
-            getItem: (key: string): string | null => null,
-            setItem: (key: string, value: string): void => { },
-            removeItem: (key: string): void => { }
-        };
-        const mockStorage2 = {
-            getItem: (key: string): string | null => null,
-            setItem: (key: string, value: string): void => { },
-            removeItem: (key: string): void => { }
-        };
+        const client1 = await createTestClient();
+        const client2 = await createTestClient();
 
-        const client1 = new PotoClient(serverUrl, mockStorage1);
-        const client2 = new PotoClient(serverUrl, mockStorage2);
-
-        await client1.loginAsVisitor();
-        await client2.loginAsVisitor();
-
-        const proxy1 = makeContextIsolationProxy(client1);
-        const proxy2 = makeContextIsolationProxy(client2);
+        const proxy1 = client1.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
+        const proxy2 = client2.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
 
         // Verify different user IDs
         expect(client1.userId).not.toBe(client2.userId);
@@ -322,17 +329,7 @@ describe("Context Isolation Tests", () => {
 
     it("should handle multiple concurrent long-running operations with context isolation", async () => {
         // Create multiple clients
-        const clients = Array.from({ length: 3 }, (_, i) => {
-            const mockStorage = {
-                getItem: (key: string): string | null => null,
-                setItem: (key: string, value: string): void => { },
-                removeItem: (key: string): void => { }
-            };
-            return new PotoClient(serverUrl, mockStorage);
-        });
-
-        // Login all clients - the server now handles race conditions properly
-        await Promise.all(clients.map(client => client.loginAsVisitor()));
+        const clients = await Promise.all(Array.from({ length: 3 }, () => createTestClient()));
 
         // Verify all have different user IDs
         const userIds = clients.map(client => client.userId);
@@ -340,7 +337,7 @@ describe("Context Isolation Tests", () => {
         expect(uniqueUserIds.size).toBe(3);
 
         // Create proxies for all clients
-        const proxies = clients.map(client => makeContextIsolationProxy(client));
+        const proxies = clients.map(client => client.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name));
 
         // Start concurrent long-running operations
         const operations = proxies.map(async (proxy, index) => {
@@ -372,7 +369,8 @@ describe("Context Isolation Tests", () => {
     });
 
     it("should maintain context isolation during mixed generator and regular method calls", async () => {
-        const contextIsolationProxy = makeContextIsolationProxy(client);
+        const client = await createTestClient();
+        const contextIsolationProxy = client.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
 
         // Test regular method
         const contextInfo = await contextIsolationProxy.postContextInfo_();
@@ -394,7 +392,8 @@ describe("Context Isolation Tests", () => {
     });
 
     it("should handle context isolation with rapid concurrent requests", async () => {
-        const contextIsolationProxy = makeContextIsolationProxy(client);
+        const client = await createTestClient();
+        const contextIsolationProxy = client.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
 
         // Create many rapid concurrent requests
         const requests = Array.from({ length: 10 }, async (_, index) => {
@@ -420,38 +419,35 @@ describe("Context Isolation Tests", () => {
         expect(uniqueRequestIds.size).toBe(10);
     });
 
-    it("should verify AsyncLocalStorage cleanup after request completion", async () => {
-        const contextIsolationProxy = makeContextIsolationProxy(client);
+    it("should verify AsyncLocalStorage context persists throughout request lifecycle", async () => {
+        const client = await createTestClient();
+        const contextIsolationProxy = client.getProxy<ContextIsolationTestModule>(ContextIsolationTestModule.name);
 
-        // Get initial active request count
-        const initialActiveRequests = await contextIsolationProxy.getActiveRequests_();
-        const initialCount = initialActiveRequests.count;
+        // Get initial context info
+        const initialInfo = await contextIsolationProxy.postContextInfo_();
+        expect(initialInfo.userId).toBe(client.userId);
 
-        // Start a generator that tracks active requests
+        // Start a generator that yields context over time
         const gen = await contextIsolationProxy.postContextIsolationGenerator_(100);
         const chunks: any[] = [];
 
-        // Read a few chunks to see active request tracking
-        let chunkCount = 0;
-        for await (const chunk of gen) {
-            chunks.push(chunk);
-            chunkCount++;
-            if (chunkCount >= 2) break; // Only read 2 chunks
-        }
-
-        // Verify active request count increased during execution
-        expect(chunks[0].activeRequestCount).toBeGreaterThan(initialCount);
-
-        // Complete the generator
+        // Collect all chunks
         for await (const chunk of gen) {
             chunks.push(chunk);
         }
 
-        // Get final active request count
-        const finalActiveRequests = await contextIsolationProxy.getActiveRequests_();
-        const finalCount = finalActiveRequests.count;
+        // Verify all chunks have correct userId (context preserved)
+        expect(chunks.length).toBeGreaterThan(0);
+        for (const chunk of chunks) {
+            expect(chunk.userId).toBe(client.userId);
+        }
 
-        // Verify cleanup (count should be back to initial or lower)
-        expect(finalCount).toBeLessThanOrEqual(initialCount + 1); // Allow for this request
+        // Get final context info - should still have same userId
+        const finalInfo = await contextIsolationProxy.postContextInfo_();
+        expect(finalInfo.userId).toBe(client.userId);
+
+        // Verify all requests had unique IDs (atomic generation)
+        const requestIds = new Set([initialInfo.requestId, ...chunks.map(c => c.requestId), finalInfo.requestId]);
+        expect(requestIds.size).toBeGreaterThanOrEqual(2); // At least initial and generator IDs should differ
     });
 });

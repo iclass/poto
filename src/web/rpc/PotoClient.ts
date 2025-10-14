@@ -151,6 +151,15 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 
 	const responseText = await response.text();
 	const data = parseTypedJson(responseText);  // Use TypedJSON parser to match server format
+	
+	// Defensive: Verify response structure
+	if (!data || typeof data !== 'object') {
+		throw new Error(`Login returned invalid data: ${responseText}`);
+	}
+	if (!data.userId || !data.token) {
+		throw new Error(`Login missing userId or token. Response: ${JSON.stringify(data)}`);
+	}
+	
 	this.userId = data.userId;
 	this.token = data.token;
 }
@@ -193,6 +202,15 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 
 	const responseText = await response.text();
 	const data = parseTypedJson(responseText);  // Use TypedJSON parser to match server format
+	
+	// Defensive: Verify response structure
+	if (!data || typeof data !== 'object') {
+		throw new Error(`Visitor registration returned invalid data: ${responseText}`);
+	}
+	if (!data.userId || !data.token) {
+		throw new Error(`Visitor registration missing userId or token. Response: ${JSON.stringify(data)}`);
+	}
+	
 	this.userId = data.userId;
 	this.token = data.token;
 
