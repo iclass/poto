@@ -353,4 +353,58 @@ export class TestGeneratorModule extends PotoModule {
             }
         });
     }
+
+    /**
+     * Returns a ReadableStream with pure binary data (simulating audio/video streaming)
+     * This streams raw binary data directly without SSE formatting
+     */
+    async postPureBinaryStream_(fileType: 'audio' | 'video'): Promise<ReadableStream<Uint8Array>> {
+        
+        // Simulate audio/video file streaming with pure binary data
+        const chunkSize = 4096; // Typical chunk size for multimedia streaming
+        // Audio: ~40KB (10 chunks), Video: 10MB (2560 chunks)
+        const totalChunks = fileType === 'audio' ? 10 : 2560;
+        const totalSize = chunkSize * totalChunks;
+
+        const stream = new ReadableStream<Uint8Array>({
+            async start(controller) {
+                try {
+                    for (let i = 0; i < totalChunks; i++) {
+                        // Reduce delay for video to avoid timeout with large size
+                        const delay = fileType === 'audio' ? 10 : 0;
+                        if (delay > 0) {
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                        }
+                        
+                        // Create realistic binary data patterns
+                        const chunkData = new Uint8Array(chunkSize);
+                        
+                        if (fileType === 'audio') {
+                            // Simulate audio waveform data (sine wave pattern)
+                            for (let j = 0; j < chunkSize; j++) {
+                                const sample = Math.sin((i * chunkSize + j) * 0.01) * 127 + 128;
+                                chunkData[j] = Math.floor(sample);
+                            }
+                        } else {
+                            // Simulate video frame data (gradient pattern)
+                            for (let j = 0; j < chunkSize; j++) {
+                                const pattern = ((i * chunkSize + j) * 13) % 256; // Pseudo-random pattern
+                                chunkData[j] = pattern;
+                            }
+                        }
+                        
+                        // Stream pure binary data directly (no JSON wrapping)
+                        controller.enqueue(chunkData);
+                    }
+                    
+                    controller.close();
+                } catch (error) {
+                    controller.error(error);
+                }
+            }
+        });
+
+        // Return stream directly - PotoServer will detect binary content and handle appropriately
+        return stream;
+    }
 }

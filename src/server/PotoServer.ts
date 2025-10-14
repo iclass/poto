@@ -771,56 +771,15 @@ export function createHttpHandler<T extends PotoModule>(
 				});
 			}
 
-			// Check if result is a ReadableStream (streaming response)
+
+			// Check if result is a ReadableStream (generic binary streaming)
 			if (result instanceof ReadableStream) {
-				// Wrap the stream to detect mid-stream client disruptions
-				// console.debug(`🎬 Starting ReadableStream`, {
-				// 	timestamp: new Date().toISOString(),
-				// 	streamType: 'ReadableStream',
-				// 	userId: userId,
-				// 	methodName: methodName
-				// });
-
-				const wrappedStream = new ReadableStream({
-					start(controller) {
-						const reader = result.getReader();
-
-						const pump = async (): Promise<void> => {
-							try {
-								const { done, value } = await reader.read();
-								if (done) {
-									// console.debug(`✅ ReadableStream completed successfully`, {
-									// 	timestamp: new Date().toISOString(),
-									// 	streamType: 'ReadableStream',
-									// 	userId: userId,
-									// 	methodName: methodName
-									// });
-									controller.close();
-									return;
-								}
-								controller.enqueue(value);
-								return pump();
-							} catch (error) {
-								// console.debug(`💥 Error during ReadableStream processing`, {
-								// 	error: error instanceof Error ? error.message : String(error),
-								// 	timestamp: new Date().toISOString(),
-								// 	streamType: 'ReadableStream'
-								// });
-								controller.error(error);
-							}
-						};
-
-						pump();
-					},
-
-					cancel(reason) {
-						return result.cancel(reason);
-					}
-				});
-
+				// ReadableStream defaults to binary/octet-stream
+				// For structured data streaming, use AsyncGenerator instead (which converts to SSE)
+				
 				// Merge session headers with stream headers
 				const streamHeaders = new Headers({
-					"Content-Type": "text/event-stream",
+					"Content-Type": "application/octet-stream",
 					"Cache-Control": "no-cache",
 					"Connection": "keep-alive",
 				});
@@ -828,7 +787,7 @@ export function createHttpHandler<T extends PotoModule>(
 					streamHeaders.set(key, value);
 				});
 
-				return new Response(wrappedStream, {
+				return new Response(result, {
 					status: 200,
 					headers: streamHeaders,
 				});

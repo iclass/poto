@@ -19,6 +19,7 @@ describe("ReadableStream Method Tests", () => {
     let serverUrl: string;
     const testPort = getRandomPort(); // Use random port to avoid conflicts
 
+
     function makeProxy(theClient: PotoClient) {
         return theClient.getProxy<TestGeneratorModule>(TestGeneratorModule.name);
     }
@@ -376,6 +377,121 @@ describe("ReadableStream Method Tests", () => {
         expect(gen.next).toBeDefined();
         expect(gen[Symbol.asyncIterator]).toBeDefined();
     });
+
+    it("should handle pure binary streaming (audio) - zero SSE overhead", async () => {
+        const testGeneratorProxy = makeProxy(client);
+
+        console.log("\n🎵 Testing pure binary audio streaming (no SSE overhead)...");
+        
+        const stream = await testGeneratorProxy.postPureBinaryStream_("audio");
+        expect(stream).toBeInstanceOf(ReadableStream);
+
+        const binaryChunks: Uint8Array[] = [];
+        let totalBytesReceived = 0;
+        const reader = stream.getReader();
+
+        try {
+            const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Stream timeout')), 5000));
+
+            const readStream = async () => {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    // Raw binary data (not SSE formatted)
+                    expect(value).toBeInstanceOf(Uint8Array);
+                    binaryChunks.push(value);
+                    totalBytesReceived += value.length;
+                }
+            };
+
+            await Promise.race([readStream(), timeout]);
+        } finally {
+            reader.releaseLock();
+        }
+
+        console.log(`  ✓ Received ${binaryChunks.length} chunks totaling ${(totalBytesReceived / 1024).toFixed(2)} KB`);
+        
+        // Verify we received binary chunks (may be coalesced)
+        expect(binaryChunks.length).toBeGreaterThan(0);
+        expect(totalBytesReceived).toBe(10 * 4096); // 10 chunks * 4096 bytes = ~40KB
+
+        // Verify binary data pattern (should be sine wave pattern)
+        const firstChunk = binaryChunks[0];
+        expect(firstChunk.length).toBeGreaterThan(0);
+        
+        // Check that values are in valid byte range
+        for (let i = 0; i < Math.min(100, firstChunk.length); i++) {
+            expect(firstChunk[i]).toBeGreaterThanOrEqual(0);
+            expect(firstChunk[i]).toBeLessThanOrEqual(255);
+        }
+    }, timeout);
+
+    it("should handle pure binary streaming (video) - 10MB with throughput", async () => {
+        const testGeneratorProxy = makeProxy(client);
+
+        console.log("\n🎬 Starting 10MB video binary streaming test...");
+        const startTime = performance.now();
+        
+        const stream = await testGeneratorProxy.postPureBinaryStream_("video");
+        expect(stream).toBeInstanceOf(ReadableStream);
+
+        let chunkCount = 0;
+        let totalBytesReceived = 0;
+        const reader = stream.getReader();
+
+        try {
+            const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Stream timeout')), 3000)); // 3s timeout for 10MB
+
+            const readStream = async () => {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    // Raw binary data (not SSE formatted)
+                    expect(value).toBeInstanceOf(Uint8Array);
+                    chunkCount++;
+                    totalBytesReceived += value.length;
+                    
+                    // Print progress every 1MB of data received
+                    const currentMB = totalBytesReceived / (1024 * 1024);
+                    const previousMB = (totalBytesReceived - value.length) / (1024 * 1024);
+                    if (Math.floor(currentMB) > Math.floor(previousMB)) {
+                        const currentTime = performance.now();
+                        const elapsedSeconds = (currentTime - startTime) / 1000;
+                        const throughputMBps = currentMB / elapsedSeconds;
+                        console.log(`  📊 Progress: ${currentMB.toFixed(2)} MB | Throughput: ${throughputMBps.toFixed(2)} MB/s | Chunks: ${chunkCount}`);
+                    }
+                }
+            };
+
+            await Promise.race([readStream(), timeout]);
+        } finally {
+            reader.releaseLock();
+        }
+
+        const endTime = performance.now();
+        const elapsedSeconds = (endTime - startTime) / 1000;
+        const totalMB = totalBytesReceived / (1024 * 1024);
+        const throughputMBps = totalMB / elapsedSeconds;
+
+        // Print final statistics
+        console.log("\n📈 Final Statistics:");
+        console.log(`  ✓ Total chunks received: ${chunkCount}`);
+        console.log(`  ✓ Average chunk size: ${(totalBytesReceived / chunkCount / 1024).toFixed(2)} KB`);
+        console.log(`  ✓ Total size: ${totalMB.toFixed(2)} MB (${totalBytesReceived.toLocaleString()} bytes)`);
+        console.log(`  ✓ Time elapsed: ${elapsedSeconds.toFixed(3)} seconds`);
+        console.log(`  ✓ Throughput: ${throughputMBps.toFixed(2)} MB/s`);
+        console.log(`  ✓ Average chunk time: ${(elapsedSeconds * 1000 / chunkCount).toFixed(3)} ms\n`);
+
+        // Verify we received exactly 10MB (chunks may be coalesced by the streaming pipeline)
+        expect(totalBytesReceived).toBe(10 * 1024 * 1024); // Exactly 10MB
+        expect(chunkCount).toBeGreaterThan(0); // At least 1 chunk
+        expect(chunkCount).toBeLessThanOrEqual(2560); // At most the original chunk count
+
+        // Verify throughput is reasonable (should be > 1 MB/s)
+        expect(throughputMBps).toBeGreaterThan(1);
+    }, 35000); // 35 second timeout
 
 
 });

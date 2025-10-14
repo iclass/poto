@@ -163,9 +163,9 @@ describe("PotoServer Streaming Methods", () => {
 
 		const res = await handler('POST', `/teststreaming/counterstream_`, authString, req);
 
-		expect(res.status).toBe(200);
-		expect(res.headers.get("Content-Type")).toBe("text/event-stream");
-		expect(res.headers.get("Cache-Control")).toBe("no-cache");
+	expect(res.status).toBe(200);
+	expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
+	expect(res.headers.get("Cache-Control")).toBe("no-cache");
 		expect(res.headers.get("Connection")).toBe("keep-alive");
 
 		const chunks = await consumeStream(res.body!);
@@ -193,10 +193,10 @@ describe("PotoServer Streaming Methods", () => {
 
 		const res = await handler('POST', `/teststreaming/textstream_`, authString, req);
 
-		expect(res.status).toBe(200);
-		expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+	expect(res.status).toBe(200);
+	expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
 
-		const chunks = await consumeStream(res.body!);
+	const chunks = await consumeStream(res.body!);
 
 		expect(chunks).toHaveLength(3);
 		expect(chunks[0]).toEqual({ word: "Hello", index: 0 });
@@ -213,10 +213,10 @@ describe("PotoServer Streaming Methods", () => {
 
 		const res = await handler('POST', `/teststreaming/emptystream_`, authString, req);
 
-		expect(res.status).toBe(200);
-		expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+	expect(res.status).toBe(200);
+	expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
 
-		const chunks = await consumeStream(res.body!);
+	const chunks = await consumeStream(res.body!);
 		expect(chunks).toHaveLength(0);
 	});
 
@@ -228,12 +228,12 @@ describe("PotoServer Streaming Methods", () => {
 			body: JSON.stringify([true])
 		});
 
-		const res = await handler('POST', `/teststreaming/errorstream_`, authString, req);
+	const res = await handler('POST', `/teststreaming/errorstream_`, authString, req);
 
-		expect(res.status).toBe(200);
-		expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+	expect(res.status).toBe(200);
+	expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
 
-		// The stream should error out, but the response itself should be successful
+	// The stream should error out, but the response itself should be successful
 		// The error will be propagated through the stream
 		const reader = res.body!.getReader();
 		try {
@@ -255,10 +255,10 @@ describe("PotoServer Streaming Methods", () => {
 
 		const res = await handler('POST', `/teststreaming/errorstream_`, authString, req);
 
-		expect(res.status).toBe(200);
-		expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+	expect(res.status).toBe(200);
+	expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
 
-		const chunks = await consumeStream(res.body!);
+	const chunks = await consumeStream(res.body!);
 		expect(chunks).toHaveLength(1);
 		expect(chunks[0]).toEqual({ message: "success" });
 	});
@@ -302,10 +302,10 @@ describe("PotoServer Streaming Methods", () => {
 
 		const res = await handler('POST', `/teststreaming/counterstream_`, authString, req);
 
-		expect(res.status).toBe(200);
-		expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+	expect(res.status).toBe(200);
+	expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
 
-		const chunks = await consumeStream(res.body!);
+	const chunks = await consumeStream(res.body!);
 
 		expect(chunks).toHaveLength(10);
 		for (let i = 0; i < 10; i++) {
@@ -330,9 +330,9 @@ describe("PotoServer Streaming Methods", () => {
 
 		// All responses should be successful
 		responses.forEach(res => {
-			expect(res.status).toBe(200);
-			expect(res.headers.get("Content-Type")).toBe("text/event-stream");
-		});
+		expect(res.status).toBe(200);
+		expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
+	});
 
 		// Verify each stream has correct data
 		for (const res of responses) {

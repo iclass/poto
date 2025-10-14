@@ -611,7 +611,7 @@ export class PotoClient {
 						return;
 					}
 					
-					// Check if this is a streaming response
+					// Check if this is a streaming response (SSE)
 					if (contentType.includes("text/event-stream")) {
 						const stream = response.body as ReadableStream<Uint8Array>;
 						
@@ -622,6 +622,14 @@ export class PotoClient {
 						
 						// For regular ReadableStream methods, return the stream directly
 						return stream;
+					}
+					
+					// Check if this is a pure binary streaming response (video, audio, etc.)
+					if (contentType.startsWith("video/") || 
+					    contentType.startsWith("audio/") || 
+					    contentType.includes("application/octet-stream")) {
+						// Return the stream directly for pure binary streaming (no buffering)
+						return response.body as ReadableStream<Uint8Array>;
 					}
 					
 			if (contentType.includes(PotoConstants.appJson)) {

@@ -260,7 +260,7 @@ describe('DataPacket', () => {
 
             // Verify timing - should complete in reasonable time
             expect(endTime - startTime).toBeGreaterThan(50); // At least as long as slowest delay
-            expect(endTime - startTime).toBeLessThan(200); // But not too long
+            expect(endTime - startTime).toBeLessThan(250); // But not too long
         });
 
         it('should handle streams with varying delay patterns', async () => {

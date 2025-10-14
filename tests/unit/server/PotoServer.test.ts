@@ -300,16 +300,25 @@ describe("PotoServer Streaming Edge Cases", () => {
 		getRoute(): string {
 			return "edgecase";
 		}
-		async postDelayedStream_(delay: number): Promise<ReadableStream<Uint8Array>> {
-			return new ReadableStream({
-				start(controller) {
-					setTimeout(() => {
-						controller.enqueue(new TextEncoder().encode(JSON.stringify({ message: "delayed" }) + '\n'));
-						controller.close();
-					}, Math.min(delay, 50)); // Cap delay for testing
+	async postDelayedStream_(delay: number): Promise<ReadableStream<Uint8Array>> {
+		return new ReadableStream({
+			async start(controller) {
+				// Use async/await to properly wait for the delay
+				await new Promise(resolve => setTimeout(resolve, Math.min(delay, 50)));
+				try {
+					controller.enqueue(new TextEncoder().encode(JSON.stringify({ message: "delayed" }) + '\n'));
+					controller.close();
+				} catch (error) {
+					// Controller might be closed if stream was cancelled
+					if (error instanceof TypeError && error.message.includes('closed')) {
+						// Stream was cancelled, ignore
+						return;
+					}
+					throw error;
 				}
-			});
-		}
+			}
+		});
+	}
 
 		async postChunkedStream_(chunkSize: number): Promise<ReadableStream<Uint8Array>> {
 			return new ReadableStream({
@@ -421,7 +430,7 @@ describe("PotoServer Streaming Edge Cases", () => {
 		const res = await handler('POST', `/edgecase/delayedstream_`, authString, req);
 
 		expect(res.status).toBe(200);
-		expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+		expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
 
 		const chunks = await consumeStream(res.body!);
 		expect(chunks).toHaveLength(1);
@@ -440,7 +449,7 @@ describe("PotoServer Streaming Edge Cases", () => {
 		const res = await handler('POST', `/edgecase/chunkedstream_`, authString, req);
 
 		expect(res.status).toBe(200);
-		expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+		expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
 
 		const chunks = await consumeStream(res.body!);
 		expect(chunks).toHaveLength(1);
@@ -458,7 +467,7 @@ describe("PotoServer Streaming Edge Cases", () => {
 		const res = await handler('POST', `/edgecase/unicodestream_`, authString, req);
 
 		expect(res.status).toBe(200);
-		expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+		expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
 
 		const chunks = await consumeStream(res.body!);
 		expect(chunks).toHaveLength(1);
@@ -480,7 +489,7 @@ describe("PotoServer Streaming Edge Cases", () => {
 		const res = await handler('POST', `/edgecase/delayedstream_`, authString, req);
 
 		expect(res.status).toBe(200);
-		expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+		expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
 
 		// Cancel the stream early
 		const reader = res.body!.getReader();
