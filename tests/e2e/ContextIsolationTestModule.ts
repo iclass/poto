@@ -3,11 +3,11 @@ import { PotoModule } from "../../src/server/PotoModule";
 /**
  * Test module specifically for testing AsyncLocalStorage context isolation
  * This module tracks request context and user information to verify isolation
+ * 
+ * FIXED: Removed mutable instance state (requestCounter, activeRequests)
+ * for concurrent safety. Now uses atomic ID generation.
  */
 export class ContextIsolationTestModule extends PotoModule {
-    private requestCounter = 0;
-    private activeRequests = new Map<string, { userId: string; startTime: number; requestId: string }>();
-
     /**
      * Generator that yields context information over time to test isolation
      */
@@ -19,15 +19,17 @@ export class ContextIsolationTestModule extends PotoModule {
         message: string;
     }> {
         const user = await this.getCurrentUser();
-        const requestId = `req_${++this.requestCounter}`;
+        // ✅ FIXED: Atomic ID generation (concurrent-safe)
+        const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
         const startTime = Date.now();
         
-        // Track this request
-        this.activeRequests.set(requestId, {
+        // ✅ FIXED: Store in session instead of instance variable
+        const requestInfo = {
             userId: user?.id || 'unknown',
             startTime,
             requestId
-        });
+        };
+        await this.setSessionValue(`request_${requestId}`, requestInfo);
 
         try {
             const endTime = startTime + duration;
