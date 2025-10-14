@@ -309,4 +309,52 @@ export class PotoDataTypesTestModule extends PotoModule {
             largeBufferProcessed: true,
         };
     }
+
+    /**
+     * Test generator that yields binary data (ArrayBuffer)
+     * This test is designed to expose a bug in server-side processing of binary data from generators
+     */
+    async *streamBinaryChunks_(chunkCount: number, chunkSize: number): AsyncGenerator<ArrayBuffer, void, unknown> {
+        // Pre-allocate view to reuse across iterations
+        const buffer = new ArrayBuffer(chunkSize);
+        const view = new Uint8Array(buffer);
+        for (let i = 0; i < chunkCount; i++) {
+            // Fill the view for the current chunk
+            for (let j = 0; j < chunkSize; j++) {
+                view[j] = (i * 8 + j) % 256;
+            }
+            yield buffer;
+        }
+    }
+
+    /**
+     * Test generator that yields Uint8Array chunks
+     * Another variant to test typed array streaming
+     */
+    async *streamUint8ArrayChunks_(chunkCount: number, chunkSize: number): AsyncGenerator<Uint8Array, void, unknown> {
+        const chunk = new Uint8Array(chunkSize);
+        for (let i = 0; i < chunkCount; i++) {
+            // Create a Uint8Array chunk
+            for (let j = 0; j < chunkSize; j++) {
+                chunk[j] = (i * 8 + j) % 256;
+            }
+            yield chunk;
+        }
+    }
+
+    /**
+     * Test generator that yields Blob chunks
+     * Testing blob streaming
+     */
+    async *streamBlobChunks_(chunkCount: number): AsyncGenerator<Blob, void, unknown> {
+        for (let i = 0; i < chunkCount; i++) {
+            // Create a blob with binary data
+            const data = new Uint8Array(8);
+            for (let j = 0; j < 8; j++) {
+                data[j] = (i * 8 + j) % 256;
+            }
+            const blob = new Blob([data], { type: 'application/octet-stream' });
+            yield blob;
+        }
+    }
 }

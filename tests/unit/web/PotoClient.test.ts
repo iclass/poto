@@ -32,20 +32,23 @@ describe("PotoClient Method Override Tests - GET/DELETE with Arguments", () => {
         client = new PotoClient("http://localhost:3000", mockStorage);
         
         // Mock fetch to capture requests
-        global.fetch = async (url: string | URL, options?: RequestInit) => {
-            const requestUrl = typeof url === 'string' ? url : url.toString();
-            capturedRequests.push({
-                method: options?.method || 'GET',
-                url: requestUrl,
-                body: options?.body
-            });
-            
-            // Return a mock successful response
-            return new Response(JSON.stringify({ success: true }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' }
-            });
-        };
+        global.fetch = Object.assign(
+            async (input: RequestInfo | URL, init?: RequestInit) => {
+                const requestUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+                capturedRequests.push({
+                    method: init?.method || 'GET',
+                    url: requestUrl,
+                    body: init?.body
+                });
+                
+                // Return a mock successful response
+                return new Response(JSON.stringify({ success: true }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            },
+            { preconnect: () => {} }
+        );
     });
 
     afterEach(() => {
@@ -277,12 +280,15 @@ describe("PotoClient _hasBlob Performance Tests", () => {
         client = new PotoClient("http://localhost:3000", mockStorage);
         
         // Mock fetch to return quickly
-        global.fetch = async () => {
-            return new Response(JSON.stringify({ success: true }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' }
-            });
-        };
+        global.fetch = Object.assign(
+            async () => {
+                return new Response(JSON.stringify({ success: true }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            },
+            { preconnect: () => {} }
+        );
     });
 
     afterEach(() => {

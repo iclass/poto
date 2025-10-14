@@ -848,4 +848,153 @@ describe("PotoDataTypes E2E Round-Trip Tests", () => {
 
         }, timeout);
     });
+
+    describe("Binary Data Streaming with Generators", () => {
+        it("should stream ArrayBuffer chunks via generator", async () => {
+            const proxy = makeProxy(client);
+            
+            const chunks: ArrayBuffer[] = [];
+            const chunkCount = 5000;
+            const chunkSize = 6400;
+            
+            try {
+                const stream: AsyncGenerator<ArrayBuffer, void, unknown> = await proxy.streamBinaryChunks_(chunkCount, chunkSize);
+                
+                for await (const chunk of stream) {
+                    // console.log('Received chunk:', chunk);
+                    // console.log('Chunk type:', Object.prototype.toString.call(chunk));
+                    // console.log('Is ArrayBuffer?', chunk instanceof ArrayBuffer);
+                    // console.log('Chunk constructor:', chunk?.constructor?.name);
+                    
+                    expect(chunk).toBeInstanceOf(ArrayBuffer);
+                    expect(chunk.byteLength).toBe(chunkSize);
+                    
+                    chunks.push(chunk);
+                }
+                
+                expect(chunks.length).toBe(chunkCount);
+                
+                // Verify content integrity
+                for (let i = 0; i < chunks.length; i++) {
+                    const view = new Uint8Array(chunks[i]);
+                    for (let j = 0; j < 8; j++) {
+                        expect(view[j]).toBe((i * 8 + j) % 256);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ BUG CONFIRMED: Failed to stream ArrayBuffer chunks:', error);
+                throw error;
+            }
+        }, 1000);
+
+        it("should stream Uint8Array chunks via generator", async () => {
+            const proxy = makeProxy(client);
+            
+            const chunks: Uint8Array[] = [];
+            const chunkCount = 5000;
+            const chunkSize = 6400;
+            
+            try {
+                const stream = await proxy.streamUint8ArrayChunks_(chunkCount, chunkSize);
+                
+                for await (const chunk of stream) {
+                    // console.log('Received Uint8Array chunk:', chunk);
+                    // console.log('Chunk type:', Object.prototype.toString.call(chunk));
+                    // console.log('Is Uint8Array?', chunk instanceof Uint8Array);
+                    // console.log('Chunk constructor:', chunk?.constructor?.name);
+                    
+                    expect(chunk).toBeInstanceOf(Uint8Array);
+                    expect(chunk.length).toBe(chunkSize);
+                    
+                    chunks.push(chunk);
+                }
+                
+                expect(chunks.length).toBe(chunkCount);
+                
+                // Verify content integrity
+                for (let i = 0; i < chunks.length; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        expect(chunks[i][j]).toBe((i * 8 + j) % 256);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ BUG CONFIRMED: Failed to stream Uint8Array chunks:', error);
+                throw error;
+            }
+        }, 1000);
+
+        it("should stream Blob chunks via generator", async () => {
+            const proxy = makeProxy(client);
+            
+            const chunks: Blob[] = [];
+            const chunkCount = 5;
+            
+            try {
+                const stream = await proxy.streamBlobChunks_(chunkCount);
+                
+                for await (const chunk of stream) {
+                    // console.log('Received Blob chunk:', chunk);
+                    // console.log('Chunk type:', Object.prototype.toString.call(chunk));
+                    // console.log('Is Blob?', chunk instanceof Blob);
+                    // console.log('Chunk constructor:', chunk?.constructor?.name);
+                    // console.log('Chunk size:', chunk?.size);
+                    
+                    // This is where we expect to see the bug
+                    expect(chunk).toBeInstanceOf(Blob);
+                    expect(chunk.size).toBe(8);
+                    expect(chunk.type).toBe('application/octet-stream');
+                    
+                    chunks.push(chunk);
+                }
+                
+                expect(chunks.length).toBe(chunkCount);
+                
+                // Verify content integrity
+                for (let i = 0; i < chunks.length; i++) {
+                    const arrayBuffer = await chunks[i].arrayBuffer();
+                    const view = new Uint8Array(arrayBuffer);
+                    for (let j = 0; j < 8; j++) {
+                        expect(view[j]).toBe((i * 8 + j) % 256);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ BUG CONFIRMED: Failed to stream Blob chunks:', error);
+                throw error;
+            }
+        }, timeout);
+
+        it("should handle mixed binary data types in generator", async () => {
+            const proxy = makeProxy(client);
+            
+            // Try with ArrayBuffer first
+            const arrayBufferChunks: ArrayBuffer[] = [];
+            const stream1 = await proxy.streamBinaryChunks_(3, 6400);
+            
+            for await (const chunk of stream1) {
+                arrayBufferChunks.push(chunk);
+            }
+            
+            expect(arrayBufferChunks.length).toBe(3);
+            
+            // Then try with Uint8Array
+            const uint8Chunks: Uint8Array[] = [];
+            const stream2 = await proxy.streamUint8ArrayChunks_(3, 6400);
+            
+            for await (const chunk of stream2) {
+                uint8Chunks.push(chunk);
+            }
+            
+            expect(uint8Chunks.length).toBe(3);
+            
+            // Finally try with Blob
+            const blobChunks: Blob[] = [];
+            const stream3 = await proxy.streamBlobChunks_(3);
+            
+            for await (const chunk of stream3) {
+                blobChunks.push(chunk);
+            }
+            
+            expect(blobChunks.length).toBe(3);
+        }, timeout);
+    });
 });
