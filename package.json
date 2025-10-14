@@ -48,7 +48,7 @@
 		"tsc": "tsc --noEmit false --outDir dist --declaration --declarationMap",
 		"tsc:server": "tsc --noEmit false --outDir dist --declaration --declarationMap --project tsconfig.json",
 		"tsc:browser": "tsc --noEmit false --outDir dist/browser --declaration --declarationMap --project tsconfig.browser.json",
-		"test": "bun test tests/unit/ tests/performance/ --randomize --concurrent && bun test tests/e2e/ --randomize --bail",
+		"test": "bun test tests/ --randomize --concurrent --bail",
 		"test:type-check": "tsc --project tsconfig.test.json --noEmit",
 		"bench:typedjson": "bun run tests/performance/TypedJSON.bench.ts",
 		"prepublishOnly": "bun run build",

@@ -22,6 +22,10 @@ export class PotoClient {
 	private currentRequestAbortController: AbortController | null = null;
 	private autoCancelPreviousRequests: boolean = true;
 	private activeRequestCount: number = 0;
+	
+	// Per-request abort controller tracking for concurrent safety
+	private requestAbortControllers: Map<number, AbortController> = new Map();
+	private nextRequestId: number = 0;
 
 	/**
 	 * Storage mechanism for credentials (default: window.localStorage if available).
@@ -85,6 +89,21 @@ export class PotoClient {
 	}
 
 	/**
+	 * Cancel all active requests (useful for cleanup/teardown)
+	 */
+	cancelAllRequests(): void {
+		for (const [requestId, controller] of this.requestAbortControllers.entries()) {
+			try {
+				controller.abort();
+			} catch (_e) {
+				// Ignore abort errors
+			}
+		}
+		this.requestAbortControllers.clear();
+		this.currentRequestAbortController = null;
+	}
+
+	/**
 	 * Get whether automatic cancellation is enabled
 	 */
 	isAutoCancelEnabled(): boolean {
@@ -117,23 +136,24 @@ export class PotoClient {
 	 * @returns Resolves when the user is successfully logged in.
 	 * @throws If the login fails.
 	 */
-	async login(credentials: { username: string; password: string }): Promise<void> {
-		const url = `${this.baseUrl}/${PotoConstants.loginUrlPath}`;
-		const response = await fetch(url, {
-			method: "POST",
-			headers: { "Content-Type": PotoConstants.appJson },
-			body: stringifyTypedJson(credentials),
-		});
+async login(credentials: { username: string; password: string }): Promise<void> {
+	const url = `${this.baseUrl}/${PotoConstants.loginUrlPath}`;
+	const response = await fetch(url, {
+		method: "POST",
+		headers: { "Content-Type": PotoConstants.appJson },
+		body: stringifyTypedJson(credentials),
+	});
 
-		if (!response.ok) {
-			const errorText = await response.text();
-			throw new Error(`Login failed: ${errorText}`);
-		}
-
-		const data = await response.json();
-		this.userId = data.userId;
-		this.token = data.token;
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Login failed: ${errorText}`);
 	}
+
+	const responseText = await response.text();
+	const data = parseTypedJson(responseText);  // Use TypedJSON parser to match server format
+	this.userId = data.userId;
+	this.token = data.token;
+}
 
 	/**
 	 * Logs in as a visitor and retrieves a visitor ID and JWT token from the server.
@@ -152,33 +172,34 @@ export class PotoClient {
 				// Attempt login with stored credentials
 				await this.login({ username: storedVisitorId, password: storedPassword });
 				return;
-			} catch (error) {
-				// Clear invalid stored credentials and fall through to re-registration
-				this.storage.removeItem("visitorId");
-				this.storage.removeItem("visitorPassword");
-			}
+		} catch (error) {
+			// Clear invalid stored credentials and fall through to re-registration
+			this.storage.removeItem("visitorId");
+			this.storage.removeItem("visitorPassword");
 		}
-
-		// Proceed with visitor registration if no valid credentials are found
-		const url = `${this.baseUrl}/${PotoConstants.registerAsTourist}`;
-		const response = await fetch(url, {
-			method: "POST",
-			headers: { "Content-Type": PotoConstants.appJson },
-		});
-
-		if (!response.ok) {
-			const errorText = await response.text();
-			throw new Error(`Visitor login failed: ${errorText}`);
-		}
-
-		const data = await response.json();
-		this.userId = data.userId;
-		this.token = data.token;
-
-		// Store the visitor credentials in storage
-		this.storage.setItem(VISITOR_ID, data.userId);
-		this.storage.setItem(PASSWORD, data.pw || "");
 	}
+
+	// Proceed with visitor registration if no valid credentials are found
+	const url = `${this.baseUrl}/${PotoConstants.registerAsTourist}`;
+	const response = await fetch(url, {
+		method: "POST",
+		headers: { "Content-Type": PotoConstants.appJson },
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Visitor login failed: ${errorText}`);
+	}
+
+	const responseText = await response.text();
+	const data = parseTypedJson(responseText);  // Use TypedJSON parser to match server format
+	this.userId = data.userId;
+	this.token = data.token;
+
+	// Store the visitor credentials in storage
+	this.storage.setItem(VISITOR_ID, data.userId);
+	this.storage.setItem(PASSWORD, data.pw || "");
+}
 
 	/**
 	 * Subscribes to server-sent events
@@ -512,30 +533,37 @@ export class PotoClient {
 					}
 
 
-					// Handle automatic cancellation of previous requests
-					let signal: AbortSignal | undefined;
-					let requestArgs = args;
-					
-					// Check if user explicitly passed an AbortSignal
-					if (args.length > 0 && args[args.length - 1] instanceof AbortSignal) {
-						signal = args[args.length - 1] as AbortSignal;
-						requestArgs = args.slice(0, -1);
-					} else if (this.autoCancelPreviousRequests && this.activeRequestCount === 0) {
-						// Only auto-cancel if there are no other active requests
-						// This allows concurrent requests to run without interference
-						if (this.currentRequestAbortController) {
-							this.cancelCurrentRequest();
-						}
-						const abortController = new AbortController();
-						this.currentRequestAbortController = abortController;
-						signal = abortController.signal;
-					}
+			// Handle automatic cancellation of previous requests
+			let signal: AbortSignal | undefined;
+			let requestArgs = args;
+			
+			// Assign unique request ID for concurrent safety
+			const requestId = this.nextRequestId++;
+			
+			// Check if user explicitly passed an AbortSignal
+			if (args.length > 0 && args[args.length - 1] instanceof AbortSignal) {
+				signal = args[args.length - 1] as AbortSignal;
+				requestArgs = args.slice(0, -1);
+			} else {
+				// CONCURRENT-SAFE: Create abort controller for each request
+				// Never cancel other requests when running concurrently
+				const abortController = new AbortController();
+				this.requestAbortControllers.set(requestId, abortController);
+				signal = abortController.signal;
+				
+				// Only store as "current" for manual cancellation via cancelCurrentRequest()
+				// But NEVER auto-cancel when there are other active requests
+				if (this.autoCancelPreviousRequests && this.activeRequestCount === 0) {
+					// Safe to set as current since no other requests are active
+					this.currentRequestAbortController = abortController;
+				}
+			}
 
-					let options: RequestInit = {
-						method: httpMethod.toUpperCase(),
-						...(Object.keys(headers).length > 0 ? { headers } : {}),
-						...(signal && { signal })
-					};
+				let options: RequestInit = {
+					method: httpMethod.toUpperCase(),
+					...(Object.keys(headers).length > 0 ? { headers } : {}),
+					...(signal && { signal })
+				};
 
 				if (httpMethod === "get" || httpMethod === "delete") {
 					// Append each argument as a JSON-encoded path segment in the URL
@@ -601,10 +629,12 @@ export class PotoClient {
 							const errorText = await response.text();
 							throw { status: response.status, text: errorText };
 						}
-					} finally {
-						// Track request completion
-						this.activeRequestCount--;
-					}
+				} finally {
+					// Track request completion
+					this.activeRequestCount--;
+					// Clean up per-request abort controller
+					this.requestAbortControllers.delete(requestId);
+				}
 
 					const contentType = response.headers.get("Content-Type") || PotoConstants.appJson;
 					if (response.status === 204) { // no content, void return type in the endpoint method

@@ -358,12 +358,10 @@ export class TestGeneratorModule extends PotoModule {
      * Returns a ReadableStream with pure binary data (simulating audio/video streaming)
      * This streams raw binary data directly without SSE formatting
      */
-    async postPureBinaryStream_(fileType: 'audio' | 'video'): Promise<ReadableStream<Uint8Array>> {
+    async postPureBinaryStream_(fileType: 'audio' | 'video', chunkSize: number = 4096, totalChunks: number = 10): Promise<ReadableStream<Uint8Array>> {
         
         // Simulate audio/video file streaming with pure binary data
-        const chunkSize = 4096; // Typical chunk size for multimedia streaming
         // Audio: ~40KB (10 chunks), Video: 10MB (2560 chunks)
-        const totalChunks = fileType === 'audio' ? 10 : 2560;
         const totalSize = chunkSize * totalChunks;
 
         const stream = new ReadableStream<Uint8Array>({
