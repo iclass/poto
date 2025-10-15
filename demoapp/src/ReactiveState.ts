@@ -596,27 +596,23 @@ export class ReactiveState<T extends Record<string, any>> {
      * 
      * FLEXIBLE SYNTAX: Use simple function OR full config object:
      * 
-     * NESTED PATHS: Supports dot notation for nested properties (loses type safety):
+     * FULLY TYPE-SAFE: Property names autocomplete, handler parameters typed automatically
      * 
      * @example
      * ```typescript
      * const $ = makeState({ 
-     *   user: { profile: { name: 'Alice' } },
-     *   currentUser: 'alice'
+     *   currentUser: 'alice' as string,
+     *   messageInput: 'Hello'
      * });
      * 
      * $.watch({
-     *   // ✅ Top-level property - FULLY TYPE-SAFE
+     *   // ✅ Type-safe property name (autocomplete)
+     *   // ✅ Type-safe parameters (user: string, prev: string)
      *   currentUser: (user, prev) => localStorage.setItem('user', user || ''),
-     *   
-     *   // ✅ Nested path with dot notation - NO TYPE SAFETY (any)
-     *   'user.profile.name': (name, prev) => {
-     *     console.log('Name changed:', name);  // name: any
-     *   },
      *   
      *   // ✅ Full syntax with options
      *   messageInput: {
-     *     handler: (msg) => saveDraft(msg),
+     *     handler: (msg) => saveDraft(msg),  // msg: string (typed!)
      *     debounce: 500,
      *     immediate: true
      *   }
@@ -626,17 +622,17 @@ export class ReactiveState<T extends Record<string, any>> {
      * // watchers are only set up once (automatic re-entry protection)
      * ```
      */
-    watch<K extends keyof T | string>(
+    watch<K extends keyof T>(
         watchMap: {
             [P in K]: 
-                | ((newValue: any, oldValue: any) => void)  // Simple: just function
-                | {                                           // Full: config object
-                    handler: (newValue: any, oldValue: any) => void;
+                | ((newValue: T[P], oldValue: T[P]) => void)  // Simple: just function
+                | {                                              // Full: config object
+                    handler: (newValue: T[P], oldValue: T[P]) => void;
                     debounce?: number;
                     immediate?: boolean;
                   }
         }
-    ): Record<string, () => void> {
+    ): Record<K, () => void> {
         // ═════════════════════════════════════════════════════════════════════════
         // IDEMPOTENT GUARD - Only initialize watchers once
         // ═════════════════════════════════════════════════════════════════════════
@@ -651,17 +647,17 @@ export class ReactiveState<T extends Record<string, any>> {
         this.watchManyInitialized = true;
         const unwatchers = {} as Record<K, () => void>;
         
-        for (const [property, config] of Object.entries(watchMap) as Array<[string, any]>) {
+        for (const [property, config] of Object.entries(watchMap) as Array<[K, any]>) {
             // Support both syntaxes:
             // 1. Simple: property: (val) => { ... }
             // 2. Full:   property: { handler: (val) => { ... }, debounce: 500 }
             
             if (typeof config === 'function') {
                 // Simple syntax - just a function
-                unwatchers[property as K] = this.watchSingle(property, config);
+                unwatchers[property] = this.watchSingle(property, config);
             } else {
                 // Full syntax - object with handler and options
-                unwatchers[property as K] = this.watchSingle(
+                unwatchers[property] = this.watchSingle(
                     property,
                     config.handler,
                     {
@@ -676,70 +672,23 @@ export class ReactiveState<T extends Record<string, any>> {
     }
 
     /**
-     * Helper: Get nested value by dot-notation path
-     * e.g., getNestedValue({ user: { name: 'Alice' } }, 'user.name') => 'Alice'
+     * Internal method: Watch a single property (fully type-safe)
      */
-    private getNestedValue(obj: any, path: string): any {
-        const keys = path.split('.');
-        let value = obj;
-        for (const key of keys) {
-            if (value == null) return undefined;
-            value = value[key];
-        }
-        return value;
-    }
-
-    /**
-     * Internal method: Watch a single property (supports nested paths with dot notation)
-     */
-    private watchSingle(
-        property: string,
-        callback: (newValue: any, oldValue: any) => void,
+    private watchSingle<K extends keyof T>(
+        property: K,
+        callback: (newValue: T[K], oldValue: T[K]) => void,
         options: WatchOptions = {}
     ): () => void {
-        // ═════════════════════════════════════════════════════════════════════════
-        // NESTED PATH SUPPORT: 'user.profile.name'
-        // ═════════════════════════════════════════════════════════════════════════
-        // For nested paths, we:
-        // 1. Watch the root property (e.g., 'user')
-        // 2. Extract nested value on each change (e.g., user.profile.name)
-        // 3. Compare nested value to detect changes
-        const isNestedPath = property.includes('.');
-        
-        if (isNestedPath) {
-            // Parse path: 'user.profile.name' => root='user', path='user.profile.name'
-            const rootProperty = property.split('.')[0];
-            let lastNestedValue = this.getNestedValue(this.state, property);
-            
-            // Create wrapper callback that extracts nested value
-            const nestedCallback = (rootValue: any, oldRootValue: any) => {
-                const newNestedValue = this.getNestedValue(rootValue, property.substring(rootProperty.length + 1));
-                
-                // Only fire if nested value actually changed
-                if (newNestedValue !== lastNestedValue) {
-                    const oldNested = lastNestedValue;
-                    lastNestedValue = newNestedValue;
-                    callback(newNestedValue, oldNested);
-                }
-            };
-            
-            // Watch the root property with our wrapper
-            return this.watchSingle(rootProperty, nestedCallback, options);
-        }
-        
-        // ═════════════════════════════════════════════════════════════════════════
-        // REGULAR (TOP-LEVEL) PROPERTY WATCHING
-        // ═════════════════════════════════════════════════════════════════════════
         
         // Initialize watcher set for this property if needed
         if (!this.watchers.has(property as string | symbol)) {
             this.watchers.set(property as string | symbol, new Set());
             // Store initial value
-            this.lastValues.set(property as string | symbol, this.state[property as keyof T]);
+            this.lastValues.set(property as string | symbol, this.state[property]);
         }
         
         // Create watcher object
-        const watcher: PropertyWatcher<any> = {
+        const watcher: PropertyWatcher<T[K]> = {
             callback,
             options
         };
@@ -750,7 +699,7 @@ export class ReactiveState<T extends Record<string, any>> {
         
         // Call immediately if requested
         if (options.immediate) {
-            const currentValue = this.state[property as keyof T];
+            const currentValue = this.state[property];
             callback(currentValue, currentValue);
         }
         
@@ -1022,16 +971,13 @@ export type StateControls<T = any> = {
      * 
      * FLEXIBLE SYNTAX: Use simple function OR full config:
      * IDEMPOTENT: Safe to call multiple times (only first call has effect)
-     * NESTED PATHS: Supports dot notation (loses type safety)
+     * FULLY TYPE-SAFE: Property names autocomplete, handler parameters typed
      * 
      * @example
      * ```typescript
      * const unwatchers = $.$watch({
-     *   // ✅ Type-safe top-level property
+     *   // ✅ Type-safe property name + parameters
      *   currentUser: (user) => saveUser(user),
-     *   
-     *   // ✅ Nested path with dot notation (no type safety)
-     *   'user.profile.name': (name) => console.log(name),
      *   
      *   // ✅ Full syntax with options
      *   messageInput: {
@@ -1041,17 +987,17 @@ export type StateControls<T = any> = {
      * });
      * ```
      */
-    $watch: <K extends keyof T | string>(
+    $watch: <K extends keyof T>(
         watchMap: {
             [P in K]: 
-                | ((newValue: any, oldValue: any) => void)
+                | ((newValue: T[P], oldValue: T[P]) => void)
                 | {
-                    handler: (newValue: any, oldValue: any) => void;
+                    handler: (newValue: T[P], oldValue: T[P]) => void;
                     debounce?: number;
                     immediate?: boolean;
                   }
         }
-    ) => Record<string, () => void>;
+    ) => Record<K, () => void>;
 };
 
 /**
