@@ -53,7 +53,18 @@ export function MyApp3({
                 console.log('🧹 Poto client cleaned up');
             }
         };
+    }).$withWatch({
+        currentUser: (user, prevUser) => {
+            if (user) {
+                localStorage.setItem('myapp3:lastUser', user);
+                console.log('💾 [$core] User saved:', user);
+            } else if (prevUser) {
+                localStorage.removeItem('myapp3:lastUser');
+                console.log('🗑️  [$core] User removed');
+            }
+        },
     });
+
 
 
     const $ui = makeState(() => {
@@ -207,18 +218,6 @@ export function MyApp3({
     // PROPERTY WATCHERS - Each state object can have its own watchers!
     // ═════════════════════════════════════════════════════════════════════════════
 
-    // Watch $core for auth persistence
-    $core.$watch({
-        currentUser: (user, prevUser) => {
-            if (user) {
-                localStorage.setItem('myapp3:lastUser', user);
-                console.log('💾 [$core] User saved:', user);
-            } else if (prevUser) {
-                localStorage.removeItem('myapp3:lastUser');
-                console.log('🗑️  [$core] User removed');
-            }
-        },
-    });
 
     // Watch $ui for draft persistence
     $ui.$watch({

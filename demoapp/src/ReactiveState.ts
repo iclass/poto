@@ -998,6 +998,39 @@ export type StateControls<T = any> = {
                   }
         }
     ) => Record<K, () => void>;
+    
+    /**
+     * Builder-style watch - sets up watchers and returns state for chaining
+     * 
+     * Same as $watch() but returns the state itself instead of unwatchers.
+     * Perfect for fluent/builder pattern with makeState().
+     * 
+     * @example
+     * ```typescript
+     * const $ = makeState({ count: 0 }).$withWatch({
+     *   count: (val) => console.log('Count:', val)
+     * });
+     * 
+     * // Or with initialization function:
+     * const $ = makeState(() => ({
+     *   state: { user: 'Alice' },
+     *   cleanup: () => cleanup()
+     * })).$withWatch({
+     *   user: (user) => saveUser(user)
+     * });
+     * ```
+     */
+    $withWatch: <K extends keyof T>(
+        watchMap: {
+            [P in K]: 
+                | ((newValue: T[P], oldValue: T[P]) => void)
+                | {
+                    handler: (newValue: T[P], oldValue: T[P]) => void;
+                    debounce?: number;
+                    immediate?: boolean;
+                  }
+        }
+    ) => T & StateControls<T>;
 };
 
 /**
@@ -1254,6 +1287,21 @@ export function makeState<T extends Record<string, any>>(
                       }
             }
         ) => stateManager.current!.watch(watchMap);
+        
+        state.$withWatch = <K extends keyof T>(
+            watchMap: {
+                [P in K]: 
+                    | ((newValue: T[P], oldValue: T[P]) => void)
+                    | {
+                        handler: (newValue: T[P], oldValue: T[P]) => void;
+                        debounce?: number;
+                        immediate?: boolean;
+                      }
+            }
+        ) => {
+            stateManager.current!.watch(watchMap);
+            return state as T & StateControls<T>;
+        };
     }
     
     return state as T & StateControls<T>;
