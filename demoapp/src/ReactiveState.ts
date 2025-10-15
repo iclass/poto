@@ -1031,6 +1031,21 @@ export type StateControls<T = any> = {
                   }
         }
     ) => T & StateControls<T>;
+    
+    /**
+     * Builder-style cleanup - registers cleanup function and returns state for chaining
+     * 
+     * Alternative to passing cleanup in the initializer function.
+     * Perfect for fluent/builder pattern with makeState().
+     * 
+     * @example
+     * ```typescript
+     * const $ = makeState({ client })
+     *     .$withCleanup(() => client.disconnect())
+     *     .$withWatch({ ... });
+     * ```
+     */
+    $withCleanup: (cleanup: () => void) => T & StateControls<T>;
 };
 
 /**
@@ -1300,6 +1315,11 @@ export function makeState<T extends Record<string, any>>(
             }
         ) => {
             stateManager.current!.watch(watchMap);
+            return state as T & StateControls<T>;
+        };
+        
+        state.$withCleanup = (cleanup: () => void) => {
+            cleanupRef.current = cleanup;
             return state as T & StateControls<T>;
         };
     }

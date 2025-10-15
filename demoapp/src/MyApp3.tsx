@@ -26,34 +26,39 @@ export function MyApp3({
     // ─────────────────────────────────────────────────────────────────────────────
     // CONNECTION & AUTH STATE - Core infrastructure
     // ─────────────────────────────────────────────────────────────────────────────
-    const $core = makeState(() => {
-        const potoClient = new PotoClient(`${host}:${port}`);
-        const module = potoClient.getProxy(Constants.serverModuleName) as DemoModule;
-        const savedUser = localStorage.getItem('myapp3:lastUser') || '';
+    // ═════════════════════════════════════════════════════════════════════════════
+    // FLUENT BUILDER API - Initialize, setup cleanup, and watch in one chain!
+    // ═════════════════════════════════════════════════════════════════════════════
+    const potoClient = new PotoClient(`${host}:${port}`);
+    const savedUser = localStorage.getItem('myapp3:lastUser') || '';
+    
+    console.log('✅ Poto client initialized');
+    if (savedUser) console.log('📂 Restored user:', savedUser);
+    
+    const $core = makeState({
+        client: potoClient,
+        demoModule: potoClient.getProxy(Constants.serverModuleName) as DemoModule,
+        currentUser: savedUser,
 
-        console.log('✅ Poto client initialized');
-        if (savedUser) console.log('📂 Restored user:', savedUser);
-
-        return {
-            state: {
-                client: potoClient,
-                demoModule: module,
-                currentUser: savedUser,
-
-                // Computed values
-                get isConnected(): boolean {
-                    return !!this.client && !!this.demoModule;
-                },
-                get isLoggedIn(): boolean {
-                    return !!this.currentUser;
-                },
-            },
-            cleanup: () => {
-                potoClient.unsubscribe();
-                console.log('🧹 Poto client cleaned up');
-            }
-        };
-    }).$withWatch({
+        // Computed values
+        get isConnected() {
+            return !!this.client && !!this.demoModule;
+        },
+        get isLoggedIn() {
+            return !!this.currentUser;
+        },
+    } as {
+        client: PotoClient;
+        demoModule: DemoModule;
+        currentUser: string;
+        readonly isConnected: boolean;
+        readonly isLoggedIn: boolean;
+    })
+    .$withCleanup(() => {
+        potoClient.unsubscribe();
+        console.log('🧹 Poto client cleaned up');
+    })
+    .$withWatch({
         currentUser: (user, prevUser) => {
             if (user) {
                 localStorage.setItem('myapp3:lastUser', user);
