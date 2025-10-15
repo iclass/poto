@@ -2,17 +2,122 @@ import { useRef, useState, useEffect } from "react";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- * ReactiveState - Core Reactivity Engine
+ * ReactiveState - Core Reactivity Engine with Performance Optimization
  * ═══════════════════════════════════════════════════════════════════════════
  * 
  * This class implements the Observable/PubSub pattern using JavaScript Proxies
  * to intercept property assignments and notify subscribers automatically.
  * 
- * Key Concepts:
+ * KEY CONCEPTS:
  * - Uses Proxy API to intercept reads (get) and writes (set)
  * - Publisher: Notifies all subscribers when state changes
  * - Subscriber: Components that want to re-render on changes
  * - NOT tied to React - pure JavaScript that could work with any framework
+ * 
+ * COMPUTED VALUES (NEW):
+ * Use getter functions to create derived state that auto-updates:
+ * ```typescript
+ * const $ = makeState({
+ *   firstName: 'John',
+ *   lastName: 'Doe',
+ *   // Computed value - auto-updates when dependencies change
+ *   get fullName() {
+ *     return `${this.firstName} ${this.lastName}`;
+ *   }
+ * });
+ * 
+ * console.log($.fullName); // "John Doe"
+ * $.firstName = 'Jane';
+ * console.log($.fullName); // "Jane Doe" - automatically updated!
+ * ```
+ * 
+ * PERFORMANCE OPTIMIZATIONS (NEW):
+ * Three built-in methods to control reactivity for streaming/bulk updates:
+ * 
+ * DEFAULT BEHAVIOR: 50ms debounce - smooth streaming UX
+ * - Optimized for streaming scenarios (chat, AI responses, real-time updates)
+ * - Creates nice "typing" effect without excessive re-renders
+ * - Set to 0 for immediate updates if needed (buttons, forms)
+ * 
+ * 1. batch() - Group multiple updates → single render
+ *    Example: Processing 100 items → 1 render instead of 100
+ * 
+ * 2. setDebounce() - Adjust delay for different scenarios
+ *    Example: Set to 0ms for immediate, 16ms for frame-sync, 100ms+ for high-frequency
+ * 
+ * 3. flush() - Force immediate render of pending changes
+ *    Example: Stream ends → show final state immediately
+ * 
+ * DEBOUNCE VALUES FOR DIFFERENT SCENARIOS:
+ * - 0ms   = Immediate updates - best for buttons, forms, clicks
+ * - 16ms  = Frame-rate sync - prevents jank, feels instant
+ * - 50ms  = Smooth streaming (DEFAULT) - nice "typing" effect
+ * - 100ms = Search-as-you-type, autocomplete
+ * - 200ms = High-frequency sensors, WebSocket streams
+ * 
+ * USAGE IN COMPONENTS:
+ * ```typescript
+ * // ════════════════════════════════════════════════════════════════
+ * // BASIC USAGE - 50ms debounce for smooth streaming
+ * // ════════════════════════════════════════════════════════════════
+ * const $ = makeState({ count: 0, name: '' });
+ * $.count++; // Updates smoothly within 50ms
+ * 
+ * // ════════════════════════════════════════════════════════════════
+ * // COMPUTED VALUES - Derived state that auto-updates!
+ * // ════════════════════════════════════════════════════════════════
+ * const $ = makeState({
+ *   firstName: 'John',
+ *   lastName: 'Doe',
+ *   age: 30,
+ *   items: ['a', 'b', 'c'],
+ *   
+ *   // Simple computed value
+ *   get fullName() {
+ *     return `${this.firstName} ${this.lastName}`;
+ *   },
+ *   
+ *   // Computed from primitive
+ *   get isAdult() {
+ *     return this.age >= 18;
+ *   },
+ *   
+ *   // Computed from other computed value
+ *   get greeting() {
+ *     return `Hello, ${this.fullName}!`;
+ *   },
+ *   
+ *   // Computed from array
+ *   get itemCount() {
+ *     return this.items.length;
+ *   }
+ * });
+ * 
+ * console.log($.fullName);  // "John Doe"
+ * $.firstName = 'Jane';
+ * console.log($.fullName);  // "Jane Doe" - automatically updated!
+ * 
+ * // ════════════════════════════════════════════════════════════════
+ * // DEBOUNCE CONTROL
+ * // ════════════════════════════════════════════════════════════════
+ * $.$setDebounce(0);   // Immediate updates for forms/buttons
+ * $.$setDebounce(16);  // Frame-rate sync (no jank)
+ * 
+ * // ════════════════════════════════════════════════════════════════
+ * // BATCHING - Multiple updates, single render
+ * // ════════════════════════════════════════════════════════════════
+ * $.$batch(() => {
+ *   $.count = 100;
+ *   $.name = 'John';
+ *   $.active = true;
+ * }); // Single re-render
+ * ```
+ * 
+ * WHEN TO USE OPTIMIZATIONS:
+ * - NO optimization needed: Small updates (1-3 properties), infrequent changes
+ * - Use batch(): Related bulk updates, complex state transitions
+ * - Use debounce(): Streaming data, rapid user input, high-frequency updates
+ * - Use both: Real-time monitoring with frequent data bursts
  * 
  * @template T - The type of the state object
  */
@@ -33,6 +138,16 @@ export class ReactiveState<T extends Record<string, any>> {
     // - Automatic deduplication (same listener won't be added twice)
     // - Order preservation (though order doesn't matter here)
     private listeners: Set<() => void> = new Set();
+    
+    // ═════════════════════════════════════════════════════════════════════════
+    // BATCHING & DEBOUNCING CONTROL
+    // ═════════════════════════════════════════════════════════════════════════
+    // Controls for optimizing multiple rapid state changes
+    // Default: 50ms - smooth streaming UX with nice "typing" effect
+    // Set to 0 for immediate updates, 16ms for frame-sync, 100ms+ for high-frequency
+    private isBatching: boolean = false;
+    private debounceTimer: NodeJS.Timeout | null = null;
+    private debounceDelay: number = 50;
     
     // ═════════════════════════════════════════════════════════════════════════
     // THE REACTIVE PROXY
@@ -110,9 +225,24 @@ export class ReactiveState<T extends Record<string, any>> {
             // ═════════════════════════════════════════════════════════════════
             // Called whenever: proxy.someProperty
             // 
-            // This is where deep reactivity happens!
-            // When you read a nested object, we wrap it in a proxy too
-            get: (obj, prop) => {
+            // This is where deep reactivity AND computed values happen!
+            // - Nested objects get wrapped in proxies for deep reactivity
+            // - Getter functions (computed values) are called with proper context
+            get: (obj, prop, receiver) => {
+                // ═════════════════════════════════════════════════════════════
+                // COMPUTED VALUES - Check if this is a getter function
+                // ═════════════════════════════════════════════════════════════
+                // Getters are defined as: get propertyName() { return ... }
+                // We need to detect them and call them with the proxy as 'this'
+                // so that accessing this.firstName inside the getter goes through
+                // the proxy and maintains reactivity
+                const descriptor = Object.getOwnPropertyDescriptor(obj, prop);
+                if (descriptor && descriptor.get) {
+                    // Call the getter with the receiver (proxy) as 'this'
+                    // This ensures computed values access other reactive properties
+                    return descriptor.get.call(receiver);
+                }
+                
                 const value = obj[prop];
                 
                 // ═════════════════════════════════════════════════════════════
@@ -125,6 +255,7 @@ export class ReactiveState<T extends Record<string, any>> {
                 // - value exists and is an object
                 // - NOT an array (arrays need special handling we don't do yet)
                 // - NOT a File (DOM objects shouldn't be proxied)
+                // - NOT a function (functions should not be proxied)
                 //
                 // LIMITATION: Arrays are not deeply reactive in this implementation
                 // $.items[0].name = 'x' won't trigger updates
@@ -133,7 +264,7 @@ export class ReactiveState<T extends Record<string, any>> {
                     return this.createProxy(value, path ? `${path}.${String(prop)}` : String(prop));
                 }
                 
-                // For primitives and special objects, just return as-is
+                // For primitives, functions, and special objects, just return as-is
                 return value;
             }
         });
@@ -176,9 +307,31 @@ export class ReactiveState<T extends Record<string, any>> {
      * - Every subscribed component re-renders
      * - Simple but less optimized for large apps
      * 
+     * OPTIMIZATION: Respects batching and debouncing
+     * - If batching is enabled, notifications are suppressed until batch ends
+     * - If debouncing is enabled, notifications are delayed and coalesced
+     * 
      * For most component-local state, this is perfectly fine!
      */
     private notifyListeners() {
+        // Skip notifications during batching
+        if (this.isBatching) {
+            return;
+        }
+        
+        // If debouncing is enabled, delay the notification
+        if (this.debounceDelay > 0) {
+            if (this.debounceTimer) {
+                clearTimeout(this.debounceTimer);
+            }
+            this.debounceTimer = setTimeout(() => {
+                this.debounceTimer = null;
+                this.listeners.forEach(listener => listener());
+            }, this.debounceDelay);
+            return;
+        }
+        
+        // Immediate notification (default behavior)
         this.listeners.forEach(listener => listener());
     }
 
@@ -205,30 +358,110 @@ export class ReactiveState<T extends Record<string, any>> {
      * BATCH UPDATES - Group multiple state changes together
      * ═════════════════════════════════════════════════════════════════════════
      * 
-     * FUTURE ENHANCEMENT: Currently this just executes immediately
-     * 
-     * Could be enhanced to:
-     * 1. Disable notifications during the batch function
-     * 2. Execute all updates
-     * 3. Notify listeners once at the end
+     * Temporarily disables notifications during a function execution.
+     * All state changes are applied, but listeners are only notified once at the end.
      * 
      * Benefits:
      * - Reduce number of re-renders
      * - Better performance for bulk updates
+     * - Perfect for processing streaming data
      * 
      * Example usage:
-     * $.batch(() => {
+     * stateManager.batch(() => {
      *   $.count = 1;
      *   $.name = 'John';
      *   $.active = true;
      * }); // Only one re-render instead of three
      * 
+     * Example with streaming data:
+     * stateManager.batch(() => {
+     *   streamedChunks.forEach(chunk => {
+     *     $.message += chunk; // Many updates
+     *   });
+     * }); // Only one re-render at the end
+     * 
      * @param updates - Function containing multiple state updates
      */
     batch(updates: () => void) {
-        // TODO: Implement actual batching
-        // For now, just execute - each update still triggers a re-render
-        updates();
+        // Set batching flag to suppress notifications
+        this.isBatching = true;
+        
+        try {
+            // Execute all the updates
+            updates();
+        } finally {
+            // Always reset the flag, even if updates() throws
+            this.isBatching = false;
+            
+            // Now notify listeners once for all the changes
+            this.notifyListeners();
+        }
+    }
+    
+    /**
+     * ═════════════════════════════════════════════════════════════════════════
+     * SET DEBOUNCE - Configure debounced notifications for optimal UX
+     * ═════════════════════════════════════════════════════════════════════════
+     * 
+     * Controls how long to wait after state changes before triggering UI updates.
+     * Default is 50ms - optimized for smooth streaming with nice "typing" effect.
+     * 
+     * Change to 0ms for immediate updates (buttons, forms) or higher for
+     * more aggressive batching of high-frequency updates.
+     * 
+     * UX GUIDELINES:
+     * - 0ms = Immediate, best for buttons/forms/direct user input
+     * - 16ms = Frame-rate sync, prevents jank
+     * - 50ms (default) = Smooth streaming text, nice "typing" effect
+     * - 100ms = Search-as-you-type, autocomplete
+     * - 200ms = High-frequency sensors/real-time data
+     * 
+     * Example usage:
+     * // Default is 50ms (smooth streaming)
+     * 
+     * // Change to immediate for forms
+     * stateManager.setDebounce(0);
+     * 
+     * // Or keep default for streaming
+     * // Rapid changes trigger one render after 50ms of silence
+     * $.text += 'a'; // Starts timer
+     * $.text += 'b'; // Resets timer
+     * $.text += 'c'; // Resets timer
+     * // ... 50ms passes with no changes
+     * // NOW the UI updates once with all changes
+     * 
+     * @param delayMs - Delay in milliseconds (default is 50ms)
+     */
+    setDebounce(delayMs: number) {
+        this.debounceDelay = delayMs;
+        
+        // Clear any existing timer when changing debounce settings
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer);
+            this.debounceTimer = null;
+        }
+    }
+    
+    /**
+     * ═════════════════════════════════════════════════════════════════════════
+     * FLUSH - Force immediate notification
+     * ═════════════════════════════════════════════════════════════════════════
+     * 
+     * If there's a pending debounced notification, execute it immediately.
+     * Useful when you want to ensure the UI is updated right away.
+     * 
+     * Example:
+     * stateManager.setDebounce(1000);
+     * $.text += 'streaming...';
+     * // Want to show final state immediately when stream ends:
+     * stateManager.flush();
+     */
+    flush() {
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer);
+            this.debounceTimer = null;
+            this.listeners.forEach(listener => listener());
+        }
     }
 }
 
@@ -241,6 +474,188 @@ type StateInitResult<T> = T | { state: T; cleanup?: () => void };
  * Type for state initializer function
  */
 type StateInitializer<T> = () => StateInitResult<T>;
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * StateControls - Performance Optimization Methods
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 
+ * These methods are automatically attached to every state object returned by
+ * makeState() or useReactiveState(). They help optimize performance when
+ * dealing with streaming data or bulk updates.
+ * 
+ * REAL-WORLD PATTERNS:
+ * 
+ * 1. STREAMING CHAT RESPONSES:
+ * ```typescript
+ * const $ = makeState({ message: '', isStreaming: false });
+ * 
+ * useEffect(() => {
+ *   $.$setDebounce(50); // Update UI every 50ms instead of every token
+ * }, []);
+ * 
+ * async function streamResponse(tokens: string[]) {
+ *   $.isStreaming = true;
+ *   for (const token of tokens) {
+ *     $.message += token; // Doesn't immediately render!
+ *     await sleep(10);
+ *   }
+ *   $.isStreaming = false;
+ *   $.$flush(); // Force final render immediately
+ * }
+ * // Result: 5-10 smooth updates instead of 100+ renders
+ * ```
+ * 
+ * 2. BULK DATA PROCESSING:
+ * ```typescript
+ * const $ = makeState({ items: [], count: 0 });
+ * 
+ * function processBatch(data: Item[]) {
+ *   $.$batch(() => {
+ *     data.forEach(item => {
+ *       $.items.push(item);
+ *       $.count++;
+ *     });
+ *   }); // Only one render for the entire batch
+ * }
+ * ```
+ * 
+ * 3. TEMPORARILY DISABLE UPDATES:
+ * ```typescript
+ * const $ = makeState({ rows: [] });
+ * 
+ * function loadHugeDataset() {
+ *   $.$setDebounce(999999); // Effectively disable updates
+ *   
+ *   $.$batch(() => {
+ *     for (let i = 0; i < 10000; i++) {
+ *       $.rows.push(createRow(i));
+ *     }
+ *   });
+ *   
+ *   $.$setDebounce(0); // Re-enable
+ *   $.$flush(); // Show final result
+ * }
+ * ```
+ * 
+ * 4. COMBINING BATCH + DEBOUNCE:
+ * ```typescript
+ * const $ = makeState({ metrics: [], alerts: [] });
+ * 
+ * useEffect(() => {
+ *   $.$setDebounce(200); // Max 5 updates/sec
+ * }, []);
+ * 
+ * function onDataBurst(metrics: Metric[], alerts: Alert[]) {
+ *   $.$batch(() => {
+ *     $.metrics.push(...metrics);
+ *     $.alerts.push(...alerts);
+ *   }); // Batched + debounced = super efficient!
+ * }
+ * ```
+ * 
+ * DEBOUNCE VALUES FOR GOOD UX (User Experience Guidelines):
+ * - 0ms   = Immediate updates - buttons, forms, direct user input
+ * - 16ms  = Frame-rate sync - prevents jank, still feels instant
+ * - 50ms  = Smooth streaming (DEFAULT) - nice "typing" effect
+ * - 100ms = Search-as-you-type, autocomplete
+ * - 200ms = High-frequency sensors, WebSocket streams
+ * 
+ * PERFORMANCE TIPS:
+ * - Default 50ms works great for most streaming scenarios
+ * - Use $setDebounce(0) for immediate updates (buttons, forms)
+ * - Use $batch() for related bulk updates
+ * - Combine batch + debounce for maximum efficiency
+ * 
+ * IMPORTANT NOTES:
+ * - DEFAULT: 50ms - optimized for smooth streaming UX
+ * - Debouncing delays UI updates, NOT state changes (state updates immediately)
+ * - Timers are automatically cleaned up on component unmount
+ * - Each makeState() instance has independent settings
+ * - Set to 0 for immediate updates when needed
+ */
+export type StateControls = {
+    /**
+     * ═════════════════════════════════════════════════════════════════════════
+     * $batch() - Group multiple state changes into a single render cycle
+     * ═════════════════════════════════════════════════════════════════════════
+     * 
+     * Temporarily disables notifications during the update function.
+     * All state changes apply immediately, but listeners are notified once at the end.
+     * 
+     * @param updates - Function containing multiple state updates
+     * 
+     * @example
+     * // ❌ Without batching: 3 separate re-renders
+     * $.count = 10;
+     * $.name = 'John';
+     * $.active = true;
+     * 
+     * // ✅ With batching: 1 re-render
+     * $.$batch(() => {
+     *   $.count = 10;
+     *   $.name = 'John';
+     *   $.active = true;
+     * });
+     */
+    $batch: (updates: () => void) => void;
+    
+    /**
+     * ═════════════════════════════════════════════════════════════════════════
+     * $setDebounce() - Configure debounce delay for different use cases
+     * ═════════════════════════════════════════════════════════════════════════
+     * 
+     * Controls how long to wait after state changes before updating the UI.
+     * Default is 50ms - optimized for smooth streaming with nice "typing" effect.
+     * 
+     * @param delayMs - Delay in milliseconds (default is 50ms)
+     * 
+     * RECOMMENDED VALUES FOR GOOD UX:
+     * - 0ms   = Immediate updates - buttons, forms, clicks, direct input
+     * - 16ms  = Frame-rate sync - prevents jank, still feels instant
+     * - 50ms  = Smooth streaming (DEFAULT) - nice "typing" effect
+     * - 100ms = Search-as-you-type, autocomplete
+     * - 200ms = High-frequency sensors, real-time data streams
+     * 
+     * @example
+     * // DEFAULT: 50ms (smooth streaming)
+     * const $ = makeState({ message: '' });
+     * // Already has 50ms debounce - no need to set
+     * 
+     * // Change to immediate for forms/buttons
+     * $.$setDebounce(0);
+     * $.count++; // Renders immediately
+     * 
+     * // Keep default for streaming
+     * for (const token of tokens) {
+     *   $.message += token; // Updates smoothly every 50ms
+     * }
+     * 
+     * // How debounce works:
+     * $.text += 'a'; // Starts 50ms timer
+     * $.text += 'b'; // Resets timer to 50ms
+     * $.text += 'c'; // Resets timer to 50ms
+     * // ... 50ms passes with no changes
+     * // NOW UI updates once with "abc"
+     */
+    $setDebounce: (delayMs: number) => void;
+    
+    /**
+     * ═════════════════════════════════════════════════════════════════════════
+     * $flush() - Force immediate notification of pending changes
+     * ═════════════════════════════════════════════════════════════════════════
+     * 
+     * If there's a pending debounced notification, execute it immediately.
+     * Useful when you want to ensure the UI is updated right away.
+     * 
+     * @example
+     * $.$setDebounce(1000);
+     * $.text += 'streaming...';
+     * // Want to show final state immediately when stream ends:
+     * $.$flush();
+     */
+    $flush: () => void;
+};
 
 /**
  * Clean API function that wraps all the React boilerplate for reactive state
@@ -262,31 +677,56 @@ type StateInitializer<T> = () => StateInitResult<T>;
  * }
  * 
  * function MyComponent() {
- *   const appState: AppState = makeState<AppState>({
+ *   const $ = makeState<AppState>({
  *     loading: false,
  *     user: '',
  *     data: []
  *   });
  * 
  *   // Direct assignment triggers UI updates automatically!
- *   appState.loading = true;
- *   appState.user = 'john';
- *   appState.data = [1, 2, 3];
+ *   $.loading = true;
+ *   $.user = 'john';
+ *   $.data = [1, 2, 3];
  * 
- *   return <div>{appState.user}</div>;
+ *   return <div>{$.user}</div>;
  * }
  * 
- * // Lazy initialization example:
+ * // Batch updates example (one re-render instead of three):
  * function MyComponent() {
- *   const appState = makeState(() => ({
- *     client: new ExpensiveClient(),
- *     connection: createConnection()
- *   }));
+ *   const $ = makeState({ count: 0, name: '', active: false });
+ *   
+ *   const handleBulkUpdate = () => {
+ *     $.$batch(() => {
+ *       $.count = 1;
+ *       $.name = 'John';
+ *       $.active = true;
+ *     });
+ *   };
+ * }
+ * 
+ * // Debounce streaming updates:
+ * function StreamingComponent() {
+ *   const $ = makeState({ text: '' });
+ *   
+ *   useEffect(() => {
+ *     // Set 100ms debounce for streaming updates
+ *     $.$setDebounce(100);
+ *     
+ *     // Simulate streaming data
+ *     const stream = connectToStream();
+ *     stream.on('chunk', (chunk) => {
+ *       $.text += chunk; // Won't render on every chunk!
+ *     });
+ *     
+ *     stream.on('end', () => {
+ *       $.$flush(); // Force immediate render of final state
+ *     });
+ *   }, []);
  * }
  * 
  * // With cleanup example:
  * function MyComponent() {
- *   const appState = makeState(() => {
+ *   const $ = makeState(() => {
  *     const client = new PotoClient('http://localhost:3000');
  *     return {
  *       state: { client, isConnected: true },
@@ -301,7 +741,7 @@ type StateInitializer<T> = () => StateInitResult<T>;
  */
 export function makeState<T extends Record<string, any>>(
     initialState: T | StateInitializer<T>
-): T {
+): T & StateControls {
     // ═══════════════════════════════════════════════════════════════════════════
     // CRITICAL: This function MUST be called inside a React component function
     // ═══════════════════════════════════════════════════════════════════════════
@@ -439,10 +879,10 @@ export function makeState<T extends Record<string, any>>(
     }, []); // Empty array = run once on mount, cleanup once on unmount
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // RETURN THE REACTIVE PROXY
+    // RETURN THE REACTIVE PROXY WITH CONTROL METHODS
     // ═══════════════════════════════════════════════════════════════════════════
     // This returns the same proxy object on every render (referential equality)
-    // - First render: Creates and returns proxy
+    // - First render: Creates and returns proxy with attached control methods
     // - Subsequent renders: Returns same proxy (no recreation)
     //
     // The proxy intercepts property assignments:
@@ -453,7 +893,16 @@ export function makeState<T extends Record<string, any>>(
     // - React re-renders when forceUpdate() is called
     // - On re-render, component reads current values from proxy
     // - React doesn't need to detect changes itself (we handle that)
-    return stateManager.current.getState();
+    const state = stateManager.current.getState() as any;
+    
+    // Attach control methods to the proxy (only once, first time)
+    if (!state.$batch) {
+        state.$batch = (updates: () => void) => stateManager.current!.batch(updates);
+        state.$setDebounce = (delayMs: number) => stateManager.current!.setDebounce(delayMs);
+        state.$flush = () => stateManager.current!.flush();
+    }
+    
+    return state as T & StateControls;
 }
 
 /**
@@ -461,21 +910,28 @@ export function makeState<T extends Record<string, any>>(
  * 
  * @template T - The type of the state object
  * @param initialState - The initial state values
- * @returns A reactive state object
+ * @returns A reactive state object with control methods
  * 
  * @example
  * ```typescript
  * function MyComponent() {
- *   const state = useReactiveState({
+ *   const $ = useReactiveState({
  *     loading: false,
  *     user: ''
  *   });
  * 
- *   state.loading = true; // Triggers re-render
+ *   $.loading = true; // Triggers re-render
+ *   
+ *   // Use control methods for optimization
+ *   $.$setDebounce(100); // Debounce updates
+ *   $.$batch(() => {
+ *     $.loading = true;
+ *     $.user = 'John';
+ *   }); // Batch multiple updates
  * }
  * ```
  */
-export function useReactiveState<T extends Record<string, any>>(initialState: T): T {
+export function useReactiveState<T extends Record<string, any>>(initialState: T): T & StateControls {
     return makeState(initialState);
 }
 

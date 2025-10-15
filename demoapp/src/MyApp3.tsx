@@ -18,7 +18,7 @@ export function MyApp3({
     // Clean API - Pure TypeScript initialization with lazy initialization!
     const $ = makeState(() => {
         const potoClient = new PotoClient(`${host}:${port}`);
-        const module = potoClient.getProxy<DemoModule>(Constants.serverModuleName);
+        const module = potoClient.getProxy(Constants.serverModuleName) as DemoModule;
 
         console.log('✅ Poto client initialized');
 
@@ -26,14 +26,13 @@ export function MyApp3({
             state: {
                 client: potoClient,
                 demoModule: module,
-                isConnected: true,
                 currentUser: '',
                 loading: false,
                 results: {
                     greeting: undefined as string | undefined,
                     echo: undefined as string | undefined,
                     serverInfo: undefined as ServerInfo | undefined,
-                    streamData: undefined as GenData[] | undefined,
+                    streamData: [] as GenData[] | undefined,
                     imageSize: undefined as ImageSize | undefined,
                     adminSecret: undefined as any,
                     error: undefined as string | undefined,
@@ -67,6 +66,109 @@ export function MyApp3({
                     duration: undefined as number | undefined,
                     bytesReceived: 0,
                     isStreaming: false,
+                },
+                
+                // ═══════════════════════════════════════════════════════════
+                // COMPUTED VALUES - Auto-update, no manual sync needed!
+                // ═══════════════════════════════════════════════════════════
+                
+                // Connection & Authentication
+                get isConnected(): boolean {
+                    return !!this.client && !!this.demoModule;
+                },
+                
+                get isLoggedIn(): boolean {
+                    return !!this.currentUser;
+                },
+                
+                get canInteract(): boolean {
+                    return !this.loading && this.isConnected && this.isLoggedIn;
+                },
+                
+                // Results Status
+                get hasError(): boolean {
+                    return !!this.results.error;
+                },
+                
+                get hasResults(): boolean {
+                    return !!(this.results.greeting || this.results.echo || this.results.serverInfo);
+                },
+                
+                get hasStreamData(): boolean {
+                    return !!this.results.streamData && this.results.streamData.length > 0;
+                },
+                
+                // File Upload
+                get hasFile(): boolean {
+                    return !!this.selectedFile;
+                },
+                
+                get canUpload(): boolean {
+                    return this.canInteract && this.hasFile;
+                },
+                
+                get fileDisplaySize(): string {
+                    if (!this.selectedFile) return '';
+                    const bytes: number = this.selectedFile.size;
+                    if (bytes < 1024) return `${bytes} B`;
+                    const kb = bytes / 1024;
+                    if (kb < 1024) return `${kb.toFixed(2)} KB`;
+                    return `${(kb / 1024).toFixed(2)} MB`;
+                },
+                
+                get uploadSpeedMbps(): string {
+                    if (!this.results.uploadTiming || !this.results.uploadTiming.rpcTime) return '';
+                    const bytesPerSec: number = this.results.uploadTiming.fileSize / (this.results.uploadTiming.rpcTime / 1000);
+                    return `${(bytesPerSec * 8 / 1024 / 1024).toFixed(2)} Mbps`;
+                },
+                
+                // Download Stats
+                get hasDownloadResults(): boolean {
+                    return !!(this.downloadResults.fileUrl || this.downloadResults.audioUrl);
+                },
+                
+                get downloadSpeedMbps(): string {
+                    if (!this.downloadResults.fileSize || !this.downloadResults.fileTime) return '';
+                    const bytesPerSec: number = this.downloadResults.fileSize / (this.downloadResults.fileTime / 1000);
+                    return `${(bytesPerSec * 8 / 1024 / 1024).toFixed(2)} Mbps`;
+                },
+                
+                get downloadDisplaySize(): string {
+                    if (!this.downloadResults.fileSize) return '';
+                    const bytes: number = this.downloadResults.fileSize;
+                    if (bytes < 1024) return `${bytes} B`;
+                    const kb = bytes / 1024;
+                    if (kb < 1024) return `${kb.toFixed(2)} KB`;
+                    return `${(kb / 1024).toFixed(2)} MB`;
+                },
+                
+                // Audio States
+                get webAudioState(): 'playing' | 'paused' | 'stopped' {
+                    if (this.webAudio.isPlaying) return 'playing';
+                    if (this.webAudio.isPaused) return 'paused';
+                    return 'stopped';
+                },
+                
+                get streamingAudioState(): 'streaming' | 'playing' | 'paused' | 'stopped' {
+                    if (this.streamingAudio.isStreaming) return 'streaming';
+                    if (this.streamingAudio.isPlaying) return 'playing';
+                    if (this.streamingAudio.isPaused) return 'paused';
+                    return 'stopped';
+                },
+                
+                get hasWebAudioData(): boolean {
+                    return this.webAudio.duration !== undefined;
+                },
+                
+                get hasStreamingAudioData(): boolean {
+                    return this.streamingAudio.duration !== undefined;
+                },
+                
+                get streamingProgressDisplay(): string {
+                    if (!this.streamingAudio.bytesReceived) return '';
+                    const kb: number = this.streamingAudio.bytesReceived / 1024;
+                    if (kb < 1024) return `${kb.toFixed(2)} KB`;
+                    return `${(kb / 1024).toFixed(2)} MB`;
                 },
             },
             cleanup: () => {
@@ -157,14 +259,12 @@ export function MyApp3({
         $.results.streamData = [];
         $.results.error = undefined;
 
-        const streamData: GenData[] = [];
 
         try {
             const stream = await $.demoModule.testStream(3);
             for await (const item of stream) {
-                streamData.push(item);
                 // Direct assignment - UI updates in real-time!
-                $.results.streamData = [...streamData];
+                $.results.streamData.push(item);
             }
         } catch (error) {
             console.error('❌ Failed to test stream:', error);
@@ -387,10 +487,12 @@ export function MyApp3({
             
             const fileUrl = URL.createObjectURL(file);
             
-            $.downloadResults.fileUrl = fileUrl;
-            $.downloadResults.fileTime = downloadTime;
-            $.downloadResults.fileSize = file.size;
-            $.results.error = undefined;
+            $.$batch(() => { // here to demo batch update to avoid UI stress
+                $.downloadResults.fileUrl = fileUrl;
+                $.downloadResults.fileTime = downloadTime;
+                $.downloadResults.fileSize = file.size;
+                $.results.error = undefined;
+            });
         } catch (error) {
             console.error('Download as File failed:', error);
             $.results.error = `Download as File failed: ${error}`;
@@ -413,10 +515,12 @@ export function MyApp3({
             const blob = new Blob([arrayBuffer], { type: 'image/png' });
             const arrayBufferUrl = URL.createObjectURL(blob);
             
-            $.downloadResults.arrayBufferUrl = arrayBufferUrl;
-            $.downloadResults.arrayBufferTime = downloadTime;
-            $.downloadResults.fileSize = arrayBuffer.byteLength;
-            $.results.error = undefined;
+            $.$batch(() => {
+                $.downloadResults.arrayBufferUrl = arrayBufferUrl;
+                $.downloadResults.arrayBufferTime = downloadTime;
+                $.downloadResults.fileSize = arrayBuffer.byteLength;
+                $.results.error = undefined;
+            });
             
         } catch (error) {
             console.error('❌ Download as ArrayBuffer failed:', error);
@@ -688,13 +792,13 @@ export function MyApp3({
                 <div className="button-group">
                     <button
                         onClick={getGreeting}
-                        disabled={$.loading || !$.isConnected || !$.currentUser}
+                        disabled={!$.canInteract}
                     >
                         Get Greeting
                     </button>
                     <button
                         onClick={getServerInfo}
-                        disabled={$.loading || !$.isConnected || !$.currentUser}
+                        disabled={!$.canInteract}
                     >
                         Get Server Info
                     </button>
@@ -723,10 +827,10 @@ export function MyApp3({
                         value={$.messageInput}
                         onChange={handleMessageInputChange}
                         placeholder="Enter a message..."
-                        disabled={$.loading || !$.isConnected || !$.currentUser} />
+                        disabled={!$.canInteract} />
                     <button
                         onClick={sendMessage}
-                        disabled={$.loading || !$.isConnected || !$.currentUser}
+                        disabled={!$.canInteract}
                     >
                         Send Message
                     </button>
@@ -745,7 +849,7 @@ export function MyApp3({
                 <div className="button-group">
                     <button
                         onClick={testStream}
-                        disabled={$.loading || !$.isConnected || !$.currentUser}
+                        disabled={!$.canInteract}
                     >
                         Test Stream (3 items)
                     </button>
@@ -772,22 +876,22 @@ export function MyApp3({
                         type="file"
                         accept="image/png"
                         onChange={handleFileUpload}
-                        disabled={$.loading || !$.isConnected || !$.currentUser} />
+                        disabled={!$.canInteract} />
                     <button
                         onClick={getImageSize}
-                        disabled={$.loading || !$.isConnected || !$.currentUser || !$.selectedFile}
+                        disabled={!$.canUpload}
                     >
                         Upload (Uint8Array)
                     </button>
                     <button
                         onClick={getImageSizeArrayBuffer}
-                        disabled={$.loading || !$.isConnected || !$.currentUser || !$.selectedFile}
+                        disabled={!$.canUpload}
                     >
                         Upload (ArrayBuffer)
                     </button>
                     <button
                         onClick={getImageSizeDirectFile}
-                        disabled={$.loading || !$.isConnected || !$.currentUser || !$.selectedFile}
+                        disabled={!$.canUpload}
                     >
                         Upload (File) ✨
                     </button>
@@ -817,13 +921,13 @@ export function MyApp3({
                 <div className="button-group">
                     <button
                         onClick={downloadAsFile}
-                        disabled={$.loading || !$.isConnected || !$.currentUser}
+                        disabled={!$.canInteract}
                     >
                         Download as File (RPC)
                     </button>
                     <button
                         onClick={downloadAsArrayBuffer}
-                        disabled={$.loading || !$.isConnected || !$.currentUser}
+                        disabled={!$.canInteract}
                     >
                         Download as ArrayBuffer (RPC)
                     </button>
@@ -951,7 +1055,7 @@ export function MyApp3({
                 <div className="button-group">
                     <button
                         onClick={testAdminSecret}
-                        disabled={$.loading || !$.isConnected || !$.currentUser}
+                        disabled={!$.canInteract}
                     >
                         Get Admin Secret
                     </button>
@@ -970,7 +1074,7 @@ export function MyApp3({
                 <div className="button-group" style={{alignItems: 'center', gap: '10px'}}>
                     <button
                         onClick={downloadAudio}
-                        disabled={$.loading || !$.isConnected || !$.currentUser}
+                        disabled={!$.canInteract}
                     >
                         Download Audio
                     </button>
@@ -1017,7 +1121,7 @@ export function MyApp3({
                 <div className="button-group">
                     <button
                         onClick={downloadAndPlayWithWebAudio}
-                        disabled={$.loading || !$.isConnected || !$.currentUser}
+                        disabled={!$.canInteract}
                     >
                         Download and Play
                     </button>
@@ -1059,7 +1163,7 @@ export function MyApp3({
                 <div className="button-group">
                     <button
                         onClick={streamAndPlayAudio}
-                        disabled={$.loading || !$.isConnected || !$.currentUser}
+                        disabled={!$.canInteract}
                     >
                         🎵 Stream & Play
                     </button>
