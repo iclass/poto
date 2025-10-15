@@ -723,6 +723,21 @@ export class ReactiveState<T extends Record<string, any>> {
 
 /**
  * Type for state initialization result
+ * 
+ * @deprecated The { state, cleanup } pattern is deprecated. Use $onUnmount() instead.
+ * 
+ * @example
+ * ```typescript
+ * // ❌ OLD (deprecated):
+ * const $ = makeState(() => ({
+ *   state: { client },
+ *   cleanup: () => client.disconnect()
+ * }));
+ * 
+ * // ✅ NEW (fluent API):
+ * const $ = makeState(() => ({ client }))
+ *   .$onUnmount(() => client.disconnect());
+ * ```
  */
 type StateInitResult<T> = T | {
     state: T;
@@ -971,22 +986,24 @@ export type StateControls<T = any> = {
     /**
      * Watch properties for changes - convenient API for initialization
      * 
+     * @deprecated Use $withWatch() instead for fluent API pattern
+     * 
      * FLEXIBLE SYNTAX: Use simple function OR full config:
      * IDEMPOTENT: Safe to call multiple times (only first call has effect)
      * FULLY TYPE-SAFE: Property names autocomplete, handler parameters typed
      * 
      * @example
      * ```typescript
+     * // ❌ OLD (deprecated):
      * const unwatchers = $.$watch({
-     *   // ✅ Type-safe property name + parameters
-     *   currentUser: (user) => saveUser(user),
-     *   
-     *   // ✅ Full syntax with options
-     *   messageInput: {
-     *     handler: (msg) => saveDraft(msg),
-     *     debounce: 500
-     *   }
+     *   currentUser: (user) => saveUser(user)
      * });
+     * 
+     * // ✅ NEW (fluent API):
+     * const $ = makeState(...)
+     *   .$withWatch({
+     *     currentUser: (user) => saveUser(user)
+     *   });
      * ```
      */
     $watch: <K extends keyof T>(
@@ -1058,20 +1075,27 @@ export type StateControls<T = any> = {
  * UI updates when properties are assigned. It handles all the React hooks
  * internally (useRef, useState, useEffect) so you don't have to.
  * 
+ * RECOMMENDED: Use fluent API for cleanup and watchers
+ * 
  * @template T - The type of the state object
  * @param initialState - The initial state values or a function that returns them (for lazy initialization)
  * @returns A reactive state object that triggers UI updates on property changes
  * 
  * @example
  * ```typescript
- * interface AppState {
- *   loading: boolean;
- *   user: string;
- *   data: any[];
- * }
+ * // ✅ RECOMMENDED: Fluent API pattern
+ * const $ = makeState(() => {
+ *   const client = new PotoClient(url);
+ *   return { client, user: '' };
+ * })
+ * .$onUnmount(() => client.disconnect())
+ * .$withWatch({
+ *   user: (u) => localStorage.setItem('user', u)
+ * });
  * 
+ * // Simple usage (no cleanup/watchers)
  * function MyComponent() {
- *   const $ = makeState<AppState>({
+ *   const $ = makeState({
  *     loading: false,
  *     user: '',
  *     data: []
@@ -1118,18 +1142,18 @@ export type StateControls<T = any> = {
  *   }, []);
  * }
  * 
- * // With cleanup example:
+ * // ❌ OLD (deprecated): { state, cleanup } pattern
  * function MyComponent() {
- *   const $ = makeState(() => {
- *     const client = new PotoClient('http://localhost:3000');
- *     return {
- *       state: { client, isConnected: true },
- *       cleanup: () => {
- *         client.disconnect();
- *         console.log('🧹 Cleaned up client');
- *       }
- *     };
- *   });
+ *   const $ = makeState(() => ({
+ *     state: { client, isConnected: true },
+ *     cleanup: () => client.disconnect()  // Don't use this anymore
+ *   }));
+ * }
+ * 
+ * // ✅ NEW: Fluent API with $onUnmount()
+ * function MyComponent() {
+ *   const $ = makeState(() => ({ client, isConnected: true }))
+ *     .$onUnmount(() => client.disconnect());
  * }
  * ```
  */
