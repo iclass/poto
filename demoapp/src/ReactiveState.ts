@@ -173,8 +173,10 @@ export class ReactiveState<T extends Record<string, any>> {
     private watchers: Map<string | symbol, Set<PropertyWatcher<any>>> = new Map();
     // Store last values for comparison
     private lastValues: Map<string | symbol, any> = new Map();
-    // Track if watchMany was already called (idempotent guard)
+    // Track if watch() was already called (idempotent guard)
     private watchManyInitialized: boolean = false;
+    // Cached empty object - reuse on subsequent watch() calls (avoid creating many {})
+    private readonly EMPTY_UNWATCHERS = Object.freeze({});
     
     // ═════════════════════════════════════════════════════════════════════════
     // THE REACTIVE PROXY
@@ -630,10 +632,10 @@ export class ReactiveState<T extends Record<string, any>> {
         // ═════════════════════════════════════════════════════════════════════════
         // This makes $.watch() safe to call in component body without useEffect
         // First call: Sets up watchers and returns unwatcher functions
-        // Subsequent calls: Returns empty object, no-op
+        // Subsequent calls: Returns cached empty object (no allocations!)
         if (this.watchManyInitialized) {
             console.log('⚠️  $.watch() already called - skipping duplicate setup');
-            return {} as Record<K, () => void>;
+            return this.EMPTY_UNWATCHERS as Record<K, () => void>;
         }
         
         this.watchManyInitialized = true;
