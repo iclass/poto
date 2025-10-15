@@ -11,6 +11,7 @@ import { makeState } from './ReactiveState';
  * 2. Batching - Group updates for single render
  * 3. Debouncing - Smooth streaming without excessive renders
  * 4. Flushing - Force immediate updates
+ * 5. Watchers - React to specific property changes (NEW!)
  * 
  * See ReactiveState.ts for detailed inline documentation and API reference.
  */
@@ -417,6 +418,107 @@ export function TemporaryDisableExample() {
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
+ * EXAMPLE 6: Property Watchers (NEW!)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 
+ * Watch specific properties and persist them or trigger side effects.
+ * Watchers respect the state debounce - called when UI updates, not on every change.
+ */
+export function PropertyWatchersExample() {
+    const $ = makeState({
+        theme: 'dark' as 'dark' | 'light',
+        username: '',
+        saveCount: 0,
+        log: [] as string[]
+    });
+
+    useEffect(() => {
+        // Watch theme changes - persist to localStorage
+        const unwatchTheme = $.$watch('theme', (newTheme, oldTheme) => {
+            localStorage.setItem('example-theme', newTheme);
+            $.log.push(`🎨 Theme: ${oldTheme} → ${newTheme}`);
+            $.saveCount++;
+        });
+
+        // Watch username - with additional debounce
+        const unwatchUser = $.$watch('username', (user) => {
+            if (user) {
+                localStorage.setItem('example-user', user);
+                $.log.push(`👤 Username saved: ${user}`);
+                $.saveCount++;
+            }
+        }, { debounce: 500 }); // Extra 500ms debounce on top of 50ms state debounce
+
+        // Load from localStorage
+        const savedTheme = localStorage.getItem('example-theme');
+        if (savedTheme === 'dark' || savedTheme === 'light') {
+            $.theme = savedTheme;
+        }
+        const savedUser = localStorage.getItem('example-user');
+        if (savedUser) {
+            $.username = savedUser;
+        }
+
+        // Cleanup watchers on unmount
+        return () => {
+            unwatchTheme();
+            unwatchUser();
+        };
+    }, []);
+
+    return (
+        <div>
+            <h3>Property Watchers Example</h3>
+            <p><small>Watchers respect 50ms debounce + optional extra debounce</small></p>
+            
+            <div style={{ marginBottom: '20px' }}>
+                <h4>Theme (auto-saved):</h4>
+                <button onClick={() => $.theme = 'dark'}>Dark</button>
+                <button onClick={() => $.theme = 'light'}>Light</button>
+                <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#f0f0f0' }}>
+                    Current: <strong>{$.theme}</strong>
+                </div>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+                <h4>Username (auto-saved with 500ms debounce):</h4>
+                <input
+                    value={$.username}
+                    onChange={(e) => $.username = e.target.value}
+                    placeholder="Type username..."
+                />
+                <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#f0f0f0' }}>
+                    <div>Username: <strong>{$.username || '(empty)'}</strong></div>
+                    <div>Total saves: <strong>{$.saveCount}</strong></div>
+                </div>
+            </div>
+
+            <div>
+                <h4>Activity Log:</h4>
+                <div style={{ 
+                    maxHeight: '150px', 
+                    overflow: 'auto', 
+                    backgroundColor: '#f5f5f5', 
+                    padding: '10px',
+                    fontFamily: 'monospace',
+                    fontSize: '12px'
+                }}>
+                    {$.log.length === 0 ? '(no activity yet)' : $.log.map((entry, i) => (
+                        <div key={i}>{entry}</div>
+                    ))}
+                </div>
+            </div>
+
+            <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#e3f2fd' }}>
+                ℹ️ <strong>How it works:</strong> Watchers are called AFTER the 50ms state debounce.
+                Username has an additional 500ms debounce, so it saves 550ms after you stop typing.
+            </div>
+        </div>
+    );
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
  * MAIN DEMO COMPONENT
  * ═══════════════════════════════════════════════════════════════════════════
  */
@@ -443,6 +545,9 @@ export default function ReactiveStateStreamingExamples() {
             
             <hr />
             <TemporaryDisableExample />
+            
+            <hr />
+            <PropertyWatchersExample />
 
             <style>{`
                 hr { margin: 30px 0; border: 1px solid #ddd; }

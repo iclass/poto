@@ -2,6 +2,22 @@ import { useRef, useState, useEffect } from "react";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
+ * Type Definitions for Property Watchers
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+interface WatchOptions {
+    debounce?: number;   // Additional debounce on top of state debounce
+    immediate?: boolean; // Call immediately with current value
+}
+
+interface PropertyWatcher<T> {
+    callback: (newValue: T, oldValue: T) => void;
+    options: WatchOptions;
+    debounceTimer?: NodeJS.Timeout;
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
  * ReactiveState - Core Reactivity Engine with Performance Optimization
  * ═══════════════════════════════════════════════════════════════════════════
  * 
@@ -148,6 +164,15 @@ export class ReactiveState<T extends Record<string, any>> {
     private isBatching: boolean = false;
     private debounceTimer: NodeJS.Timeout | null = null;
     private debounceDelay: number = 50;
+    
+    // ═════════════════════════════════════════════════════════════════════════
+    // PROPERTY WATCHERS
+    // ═════════════════════════════════════════════════════════════════════════
+    // Map of property names to their watchers
+    // Watchers are called AFTER the debounce/batch (when UI updates)
+    private watchers: Map<string | symbol, Set<PropertyWatcher<any>>> = new Map();
+    // Store last values for comparison
+    private lastValues: Map<string | symbol, any> = new Map();
     
     // ═════════════════════════════════════════════════════════════════════════
     // THE REACTIVE PROXY
@@ -310,6 +335,7 @@ export class ReactiveState<T extends Record<string, any>> {
      * OPTIMIZATION: Respects batching and debouncing
      * - If batching is enabled, notifications are suppressed until batch ends
      * - If debouncing is enabled, notifications are delayed and coalesced
+     * - Property watchers are called AFTER the debounce (when UI updates)
      * 
      * For most component-local state, this is perfectly fine!
      */
@@ -326,13 +352,55 @@ export class ReactiveState<T extends Record<string, any>> {
             }
             this.debounceTimer = setTimeout(() => {
                 this.debounceTimer = null;
+                // Notify UI listeners
                 this.listeners.forEach(listener => listener());
+                // Notify property watchers (after debounce)
+                this.notifyWatchers();
             }, this.debounceDelay);
             return;
         }
         
-        // Immediate notification (default behavior)
+        // Immediate notification
         this.listeners.forEach(listener => listener());
+        this.notifyWatchers();
+    }
+    
+    /**
+     * ═════════════════════════════════════════════════════════════════════════
+     * NOTIFY WATCHERS - Call property-specific watchers
+     * ═════════════════════════════════════════════════════════════════════════
+     * 
+     * Called after the state debounce, when UI actually updates
+     * Checks each watched property and calls callbacks if value changed
+     */
+    private notifyWatchers() {
+        this.watchers.forEach((watcherSet, property) => {
+            const currentValue = this.state[property as keyof T];
+            const lastValue = this.lastValues.get(property);
+            
+            // Only notify if value actually changed
+            if (currentValue !== lastValue) {
+                this.lastValues.set(property, currentValue);
+                
+                // Call all watchers for this property
+                watcherSet.forEach(watcher => {
+                    const { callback, options, debounceTimer } = watcher;
+                    
+                    // Apply watcher-specific debounce if specified
+                    if (options.debounce && options.debounce > 0) {
+                        if (debounceTimer) {
+                            clearTimeout(debounceTimer);
+                        }
+                        watcher.debounceTimer = setTimeout(() => {
+                            callback(currentValue, lastValue);
+                        }, options.debounce);
+                    } else {
+                        // Call immediately (respects state debounce already)
+                        callback(currentValue, lastValue);
+                    }
+                });
+            }
+        });
     }
 
     /**
@@ -461,7 +529,102 @@ export class ReactiveState<T extends Record<string, any>> {
             clearTimeout(this.debounceTimer);
             this.debounceTimer = null;
             this.listeners.forEach(listener => listener());
+            this.notifyWatchers();
         }
+    }
+    
+    /**
+     * ═════════════════════════════════════════════════════════════════════════
+     * WATCH - Watch a specific property for changes
+     * ═════════════════════════════════════════════════════════════════════════
+     * 
+     * Set up a callback that's called when a specific property changes.
+     * Watchers are called AFTER the state debounce (when UI updates), not on
+     * every raw assignment.
+     * 
+     * RESPECTS STATE DEBOUNCE:
+     * - If state has 50ms debounce, watcher is called after that 50ms
+     * - Can add additional watcher-specific debounce on top
+     * - Ensures watchers fire when UI actually updates
+     * 
+     * TYPE-SAFE:
+     * - Property name has autocomplete
+     * - Callback parameters are automatically typed
+     * - TypeScript catches property name typos
+     * 
+     * Example usage:
+     * ```typescript
+     * const $ = makeState({ 
+     *   theme: 'dark',
+     *   userId: '',
+     *   count: 0
+     * });
+     * 
+     * // Watch single property (respects 50ms state debounce)
+     * $.$watch('theme', (newTheme, oldTheme) => {
+     *   // newTheme and oldTheme are typed as string
+     *   localStorage.setItem('theme', newTheme);
+     *   console.log(`Theme changed: ${oldTheme} → ${newTheme}`);
+     * });
+     * 
+     * // With additional watcher-specific debounce
+     * $.$watch('userId', (user) => {
+     *   // Called after 50ms state debounce + 500ms watcher debounce
+     *   api.saveUser(user);
+     * }, { debounce: 500 });
+     * 
+     * // Call immediately with current value
+     * $.$watch('count', (count) => {
+     *   console.log('Count:', count);
+     * }, { immediate: true });
+     * ```
+     * 
+     * @param property - Property name to watch (type-safe, autocomplete)
+     * @param callback - Called when property changes (typed parameters)
+     * @param options - Optional configuration
+     * @returns Unwatch function - call to stop watching
+     */
+    watch<K extends keyof T>(
+        property: K,
+        callback: (newValue: T[K], oldValue: T[K]) => void,
+        options: WatchOptions = {}
+    ): () => void {
+        // Initialize watcher set for this property if needed
+        if (!this.watchers.has(property as string | symbol)) {
+            this.watchers.set(property as string | symbol, new Set());
+            // Store initial value
+            this.lastValues.set(property as string | symbol, this.state[property]);
+        }
+        
+        // Create watcher object
+        const watcher: PropertyWatcher<T[K]> = {
+            callback,
+            options
+        };
+        
+        // Add to watchers
+        const watcherSet = this.watchers.get(property as string | symbol)!;
+        watcherSet.add(watcher);
+        
+        // Call immediately if requested
+        if (options.immediate) {
+            const currentValue = this.state[property];
+            callback(currentValue, currentValue);
+        }
+        
+        // Return unwatch function
+        return () => {
+            watcherSet.delete(watcher);
+            // Clean up if no more watchers for this property
+            if (watcherSet.size === 0) {
+                this.watchers.delete(property as string | symbol);
+                this.lastValues.delete(property as string | symbol);
+            }
+            // Clear any pending debounce timer
+            if (watcher.debounceTimer) {
+                clearTimeout(watcher.debounceTimer);
+            }
+        };
     }
 }
 
@@ -574,7 +737,7 @@ type StateInitializer<T> = () => StateInitResult<T>;
  * - Each makeState() instance has independent settings
  * - Set to 0 for immediate updates when needed
  */
-export type StateControls = {
+export type StateControls<T = any> = {
     /**
      * ═════════════════════════════════════════════════════════════════════════
      * $batch() - Group multiple state changes into a single render cycle
@@ -655,6 +818,65 @@ export type StateControls = {
      * $.$flush();
      */
     $flush: () => void;
+    
+    /**
+     * ═════════════════════════════════════════════════════════════════════════
+     * $watch() - Watch a specific property for changes (TYPE-SAFE!)
+     * ═════════════════════════════════════════════════════════════════════════
+     * 
+     * Set up a callback that's called when a specific property changes.
+     * 
+     * RESPECTS STATE DEBOUNCE:
+     * - Watchers are called AFTER the state debounce (when UI updates)
+     * - If state has 50ms debounce, watcher fires after that 50ms
+     * - Can add additional watcher-specific debounce on top
+     * 
+     * TYPE-SAFE:
+     * - Property names have autocomplete
+     * - Callback parameters are automatically typed
+     * - TypeScript catches typos and type errors
+     * 
+     * USE CASES:
+     * - Persist specific properties to localStorage
+     * - Sync with server when data changes
+     * - Analytics tracking
+     * - Side effects on specific state changes
+     * 
+     * @param property - Property name to watch (autocomplete!)
+     * @param callback - Called when property changes (typed!)
+     * @param options - Optional configuration
+     * @returns Unwatch function - call to stop watching
+     * 
+     * @example
+     * const $ = makeState({ 
+     *   theme: 'dark', 
+     *   userId: '',
+     *   count: 0 
+     * });
+     * 
+     * // Watch with autocomplete and type safety
+     * $.$watch('theme', (newTheme, oldTheme) => {
+     *   // newTheme and oldTheme are typed as string
+     *   localStorage.setItem('theme', newTheme);
+     *   console.log(`${oldTheme} → ${newTheme}`);
+     * });
+     * 
+     * // Additional watcher-specific debounce
+     * $.$watch('userId', (user) => {
+     *   api.saveUser(user); // Debounced save
+     * }, { debounce: 500 });
+     * 
+     * // Unwatch when done
+     * const unwatch = $.$watch('count', (count) => {
+     *   console.log('Count:', count);
+     * });
+     * unwatch(); // Stop watching
+     */
+    $watch: <K extends keyof T>(
+        property: K,
+        callback: (newValue: T[K], oldValue: T[K]) => void,
+        options?: WatchOptions
+    ) => () => void;
 };
 
 /**
@@ -741,7 +963,7 @@ export type StateControls = {
  */
 export function makeState<T extends Record<string, any>>(
     initialState: T | StateInitializer<T>
-): T & StateControls {
+): T & StateControls<T> {
     // ═══════════════════════════════════════════════════════════════════════════
     // CRITICAL: This function MUST be called inside a React component function
     // ═══════════════════════════════════════════════════════════════════════════
@@ -900,9 +1122,14 @@ export function makeState<T extends Record<string, any>>(
         state.$batch = (updates: () => void) => stateManager.current!.batch(updates);
         state.$setDebounce = (delayMs: number) => stateManager.current!.setDebounce(delayMs);
         state.$flush = () => stateManager.current!.flush();
+        state.$watch = <K extends keyof T>(
+            property: K,
+            callback: (newValue: T[K], oldValue: T[K]) => void,
+            options?: WatchOptions
+        ) => stateManager.current!.watch(property, callback, options);
     }
     
-    return state as T & StateControls;
+    return state as T & StateControls<T>;
 }
 
 /**
@@ -931,7 +1158,7 @@ export function makeState<T extends Record<string, any>>(
  * }
  * ```
  */
-export function useReactiveState<T extends Record<string, any>>(initialState: T): T & StateControls {
+export function useReactiveState<T extends Record<string, any>>(initialState: T): T & StateControls<T> {
     return makeState(initialState);
 }
 
