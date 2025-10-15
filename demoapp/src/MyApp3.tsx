@@ -2,13 +2,7 @@ import { PotoClient } from "poto";
 import { Constants, ServerInfo, GenData, ImageSize } from "./demoConsts";
 import type { DemoModule } from "./DemoModule";
 import { makeState } from "./ReactiveState";
-import { MSEAudioPlayer } from "./MSEAudioPlayer";
-import { StreamingAudioPlayer } from "./StreamingAudioPlayer";
-
-// Store MSE player at module level to persist across renders
-let msePlayer: MSEAudioPlayer | undefined;
-// Store streaming player at module level
-let streamingPlayer: StreamingAudioPlayer | undefined;
+import { MyApp3Audio } from "./MyApp3Audio";
 
 export function MyApp3({
     host = 'http://localhost' as string, port = Constants.port as number
@@ -161,65 +155,6 @@ export function MyApp3({
             return `${(kb / 1024).toFixed(2)} MB`;
         },
     })
-
-    // ─────────────────────────────────────────────────────────────────────────────
-    // AUDIO STATE - Web Audio & Streaming Audio players
-    // ─────────────────────────────────────────────────────────────────────────────
-    const $audio = makeState(() => {
-        const savedAudioPref = localStorage.getItem('myapp3:autoPlayAudio');
-        if (savedAudioPref !== null) console.log('📂 Restored audio preference:', savedAudioPref);
-
-        return {
-            autoPlayAudio: savedAudioPref === 'false' ? false : true,
-            webAudio: {
-                isPlaying: false,
-                isPaused: false,
-                duration: undefined as number | undefined,
-                sampleRate: undefined as number | undefined,
-                channels: undefined as number | undefined,
-                startTime: 0,
-                pauseTime: 0,
-            },
-            streamingAudio: {
-                isPlaying: false,
-                isPaused: false,
-                duration: undefined as number | undefined,
-                bytesReceived: 0,
-                isStreaming: false,
-            },
-
-            // Computed values
-            get webAudioState(): 'playing' | 'paused' | 'stopped' {
-                if ($audio.webAudio.isPlaying) return 'playing';
-                if ($audio.webAudio.isPaused) return 'paused';
-                return 'stopped';
-            },
-            get streamingAudioState(): 'streaming' | 'playing' | 'paused' | 'stopped' {
-                if ($audio.streamingAudio.isStreaming) return 'streaming';
-                if ($audio.streamingAudio.isPlaying) return 'playing';
-                if ($audio.streamingAudio.isPaused) return 'paused';
-                return 'stopped';
-            },
-            get hasWebAudioData(): boolean {
-                return $audio.webAudio.duration !== undefined;
-            },
-            get hasStreamingAudioData(): boolean {
-                return $audio.streamingAudio.duration !== undefined;
-            },
-            get streamingProgressDisplay(): string {
-                if (!$audio.streamingAudio.bytesReceived) return '';
-                const kb: number = $audio.streamingAudio.bytesReceived / 1024;
-                if (kb < 1024) return `${kb.toFixed(2)} KB`;
-                return `${(kb / 1024).toFixed(2)} MB`;
-            },
-        };
-    })
-    .$withWatch({
-        autoPlayAudio: (enabled) => {
-            localStorage.setItem('myapp3:autoPlayAudio', String(enabled));
-            console.log('💾 [$audio] Preference saved:', enabled ? 'ON' : 'OFF');
-        },
-    });
 
     const login = async (username: string, password: string) => {
         if (!$core.client) return;
@@ -439,58 +374,11 @@ export function MyApp3({
         }
     };
 
-    // Centralized function to stop all audio players
-    const stopAllPlayers = () => {
-        // Stop HTML5 audio element
-        const audioElement = document.querySelector('audio');
-        if (audioElement) {
-            audioElement.pause();
-            audioElement.currentTime = 0;
-        }
-
-        // Clean up MSE player
-        if (msePlayer) {
-            msePlayer.cleanup();
-            msePlayer = undefined;
-        }
-
-        // Clean up streaming player
-        if (streamingPlayer) {
-            streamingPlayer.cleanup();
-            streamingPlayer = undefined;
-        }
-
-        // Reset all audio state
-        $audio.webAudio = {
-            isPlaying: false,
-            isPaused: false,
-            duration: undefined,
-            sampleRate: undefined,
-            channels: undefined,
-            startTime: 0,
-            pauseTime: 0,
-        };
-
-        $audio.streamingAudio = {
-            isPlaying: false,
-            isPaused: false,
-            duration: undefined,
-            bytesReceived: 0,
-            isStreaming: false,
-        };
-    };
-
     const clearResults = () => {
         // Clean up URLs to prevent memory leaks
         if ($api.downloadResults.fileUrl) {
             URL.revokeObjectURL($api.downloadResults.fileUrl);
         }
-        if ($api.downloadResults.audioUrl) {
-            URL.revokeObjectURL($api.downloadResults.audioUrl);
-        }
-
-        // Stop all players
-        stopAllPlayers();
 
 
         $api.results = {
@@ -513,24 +401,6 @@ export function MyApp3({
             fileTime: undefined,
             staticUrlTime: undefined,
             fileSize: undefined,
-        };
-
-        $audio.webAudio = {
-            isPlaying: false,
-            isPaused: false,
-            duration: undefined,
-            sampleRate: undefined,
-            channels: undefined,
-            startTime: 0,
-            pauseTime: 0,
-        };
-
-        $audio.streamingAudio = {
-            isPlaying: false,
-            isPaused: false,
-            duration: undefined,
-            bytesReceived: 0,
-            isStreaming: false,
         };
     };
 
@@ -609,205 +479,9 @@ export function MyApp3({
 
 
 
-    const downloadAudio = async () => {
-        if (!$core.demoModule) return;
-
-        // Stop all other players before starting HTML5 audio
-        stopAllPlayers();
-
-        $ui.loading = true;
-        try {
-            const audioBlob = await $core.demoModule.downloadAudioFile();
-            const audioUrl = URL.createObjectURL(audioBlob);
-
-            $api.downloadResults.audioUrl = audioUrl;
-            $api.results.error = undefined;
-        } catch (error) {
-            console.error('Download audio failed:', error);
-            $api.results.error = `Download audio failed: ${error}`;
-        } finally {
-            $ui.loading = false;
-        }
-    };
-
     const handleMessageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         $ui.messageInput = e.target.value;
     };
-
-    const downloadAndPlayWithWebAudio = async () => {
-        if (!$core.demoModule) return;
-
-        // Stop all other players before starting MSE player
-        stopAllPlayers();
-
-        $ui.loading = true;
-        try {
-            const audioBlob = await $core.demoModule.downloadAudioFile();
-
-            // Create and use MSE player for low-latency streaming
-            msePlayer = new MSEAudioPlayer();
-
-            await msePlayer.loadAndPlay(
-                audioBlob,
-                // On playback start
-                () => {
-                    $audio.webAudio.isPlaying = true;
-                    $audio.webAudio.isPaused = false;
-                    $ui.loading = false;
-                },
-                // On metadata loaded
-                (duration) => {
-                    $audio.webAudio.duration = duration;
-                    $audio.webAudio.sampleRate = 48000; // MP3 typical
-                    $audio.webAudio.channels = 2; // Stereo typical
-                },
-                // On ended
-                () => {
-                    $audio.webAudio.isPlaying = false;
-                    $audio.webAudio.isPaused = false;
-                }
-            );
-
-            $api.results.error = undefined;
-        } catch (error) {
-            console.error('❌ MSE streaming failed:', error);
-            $api.results.error = `MSE streaming failed: ${error}`;
-            $ui.loading = false;
-        }
-    };
-
-    const playWebAudio = async () => {
-        if (!msePlayer) return;
-
-        if ($audio.webAudio.isPaused) {
-            // Resume from pause
-            msePlayer.play();
-            $audio.webAudio.isPlaying = true;
-            $audio.webAudio.isPaused = false;
-        } else {
-            // Restart from beginning
-            msePlayer.restart();
-            $audio.webAudio.isPlaying = true;
-            $audio.webAudio.isPaused = false;
-        }
-    };
-
-    const pauseWebAudio = async () => {
-        if (!$audio.webAudio.isPlaying || !msePlayer) return;
-
-        try {
-            msePlayer.pause();
-            $audio.webAudio.isPlaying = false;
-            $audio.webAudio.isPaused = true;
-        } catch (error: any) {
-            console.error('❌ Pause failed:', error);
-            $api.results.error = `Pause failed: ${error}`;
-        }
-    };
-
-    const stopWebAudio = () => {
-        if (!msePlayer) return;
-
-        try {
-            msePlayer.stop();
-            $audio.webAudio.isPlaying = false;
-            $audio.webAudio.isPaused = false;
-            $audio.webAudio.pauseTime = 0;
-            $audio.webAudio.startTime = 0;
-        } catch (error) {
-            console.error('❌ Stop failed:', error);
-            // Reset state on error
-            $audio.webAudio.isPlaying = false;
-            $audio.webAudio.isPaused = false;
-            $audio.webAudio.pauseTime = 0;
-        }
-    };
-
-    const streamAndPlayAudio = async () => {
-        if (!$core.demoModule) return;
-
-        // Stop all other players before starting streaming player
-        stopAllPlayers();
-
-        $ui.loading = true;
-        $audio.streamingAudio.bytesReceived = 0;
-        $audio.streamingAudio.isStreaming = true;
-
-        try {
-            // Create new streaming player
-            streamingPlayer = new StreamingAudioPlayer();
-
-            // Get the audio stream from server (Bun streams natively)
-            const audioStream = await $core.demoModule.streamAudioFile();
-
-            // Stream and play
-            await streamingPlayer.streamAndPlay(
-                audioStream,
-                // On playback start
-                () => {
-                    $audio.streamingAudio.isPlaying = true;
-                    $audio.streamingAudio.isPaused = false;
-                    $ui.loading = false;
-                    console.log('🎵 Streaming playback started!');
-                },
-                // On metadata loaded
-                (duration) => {
-                    $audio.streamingAudio.duration = duration;
-                    console.log(`🎵 Audio duration: ${duration.toFixed(2)}s`);
-                },
-                // On ended
-                () => {
-                    $audio.streamingAudio.isPlaying = false;
-                    $audio.streamingAudio.isPaused = false;
-                    $audio.streamingAudio.isStreaming = false;
-                    console.log('🎵 Streaming playback ended');
-                },
-                // On progress
-                (bytesReceived) => {
-                    $audio.streamingAudio.bytesReceived = bytesReceived;
-                }
-            );
-
-            $audio.streamingAudio.isStreaming = false;
-            $api.results.error = undefined;
-        } catch (error) {
-            console.error('❌ Streaming playback failed:', error);
-            $api.results.error = `Streaming playback failed: ${error}`;
-            $audio.streamingAudio.isStreaming = false;
-            $ui.loading = false;
-        }
-    };
-
-    const playStreamingAudio = () => {
-        if (!streamingPlayer) return;
-
-        if ($audio.streamingAudio.isPaused) {
-            streamingPlayer.play();
-            $audio.streamingAudio.isPlaying = true;
-            $audio.streamingAudio.isPaused = false;
-        } else {
-            streamingPlayer.restart();
-            $audio.streamingAudio.isPlaying = true;
-            $audio.streamingAudio.isPaused = false;
-        }
-    };
-
-    const pauseStreamingAudio = () => {
-        if (!$audio.streamingAudio.isPlaying || !streamingPlayer) return;
-
-        streamingPlayer.pause();
-        $audio.streamingAudio.isPlaying = false;
-        $audio.streamingAudio.isPaused = true;
-    };
-
-    const stopStreamingAudio = () => {
-        if (!streamingPlayer) return;
-
-        streamingPlayer.stop();
-        $audio.streamingAudio.isPlaying = false;
-        $audio.streamingAudio.isPaused = false;
-    };
-
 
     return (
         <div className="container">
@@ -823,7 +497,7 @@ export function MyApp3({
             <div className="info" style={{ backgroundColor: '#e8f5e9', borderColor: '#4caf50' }}>
                 <h3>🔍 Property Watchers Demo</h3>
                 <p><small>
-                    Active watchers: <strong>currentUser</strong>, <strong>messageInput</strong>, <strong>autoPlayAudio</strong>
+                    Active watchers: <strong>currentUser</strong>, <strong>messageInput</strong>
                 </small></p>
                 <p><small>
                     ✅ Check console to see watchers firing!<br />
@@ -1146,147 +820,8 @@ export function MyApp3({
                 )}
             </div>
 
-            <div className="demo-section">
-                <h3>🎵 Audio Download & Playback (HTML5)</h3>
-                <div className="button-group" style={{ alignItems: 'center', gap: '10px' }}>
-                    <button
-                        onClick={downloadAudio}
-                        disabled={!$ui.canInteract}
-                    >
-                        Download Audio
-                    </button>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                        <input
-                            type="checkbox"
-                            checked={$audio.autoPlayAudio}
-                            onChange={(e) => $audio.autoPlayAudio = e.target.checked}
-                            style={{ cursor: 'pointer' }}
-                        />
-                        Auto Play
-                    </label>
-                </div>
-
-                {$api.downloadResults.audioUrl && (
-                    <div className="result">
-                        <audio
-                            controls
-                            autoPlay={$audio.autoPlayAudio}
-                            src={$api.downloadResults.audioUrl}
-                            style={{ width: '100%' }}
-                            onPlay={() => {
-                                // When HTML5 audio plays, stop other players
-                                if (msePlayer) {
-                                    msePlayer.cleanup();
-                                    msePlayer = undefined;
-                                    $audio.webAudio.isPlaying = false;
-                                    $audio.webAudio.isPaused = false;
-                                }
-                                if (streamingPlayer) {
-                                    streamingPlayer.cleanup();
-                                    streamingPlayer = undefined;
-                                    $audio.streamingAudio.isPlaying = false;
-                                    $audio.streamingAudio.isPaused = false;
-                                }
-                            }}
-                        />
-                    </div>
-                )}
-            </div>
-
-            <div className="demo-section">
-                <h3>🎛️ Web Audio API Playback</h3>
-                <div className="button-group">
-                    <button
-                        onClick={downloadAndPlayWithWebAudio}
-                        disabled={!$ui.canInteract}
-                    >
-                        Download and Play
-                    </button>
-                    <button
-                        onClick={playWebAudio}
-                        disabled={!$audio.webAudio.duration || $audio.webAudio.isPlaying}
-                    >
-                        ▶️ Play
-                    </button>
-                    <button
-                        onClick={pauseWebAudio}
-                        disabled={!$audio.webAudio.isPlaying}
-                    >
-                        ⏸️ Pause
-                    </button>
-                    <button
-                        onClick={stopWebAudio}
-                        disabled={!$audio.webAudio.isPlaying && !$audio.webAudio.isPaused}
-                    >
-                        ⏹️ Stop
-                    </button>
-                </div>
-
-                {$audio.webAudio.duration && (
-                    <div className="result">
-                        <p><strong>Duration:</strong> {$audio.webAudio.duration.toFixed(2)}s | <strong>State:</strong> {
-                            $audio.webAudio.isPlaying ? '▶️ Playing' :
-                                $audio.webAudio.isPaused ? '⏸️ Paused' :
-                                    '⏹️ Stopped'
-                        }</p>
-                        <p><small>Sample rate: {$audio.webAudio.sampleRate}Hz | Channels: {$audio.webAudio.channels}</small></p>
-                    </div>
-                )}
-            </div>
-
-            <div className="demo-section">
-                <h3>🌊 Progressive Streaming Audio (ReadableStream)</h3>
-                <p><small>Server returns a pure ReadableStream that streams chunks over the network progressively</small></p>
-                <div className="button-group">
-                    <button
-                        onClick={streamAndPlayAudio}
-                        disabled={!$ui.canInteract}
-                    >
-                        🎵 Stream & Play
-                    </button>
-                    <button
-                        onClick={playStreamingAudio}
-                        disabled={!$audio.streamingAudio.duration || $audio.streamingAudio.isPlaying}
-                    >
-                        ▶️ Play
-                    </button>
-                    <button
-                        onClick={pauseStreamingAudio}
-                        disabled={!$audio.streamingAudio.isPlaying}
-                    >
-                        ⏸️ Pause
-                    </button>
-                    <button
-                        onClick={stopStreamingAudio}
-                        disabled={!$audio.streamingAudio.isPlaying && !$audio.streamingAudio.isPaused}
-                    >
-                        ⏹️ Stop
-                    </button>
-                </div>
-
-                {($audio.streamingAudio.isStreaming || $audio.streamingAudio.bytesReceived > 0) && (
-                    <div className="result">
-                        <h4>📊 Streaming Progress:</h4>
-                        <p>
-                            <strong>Bytes Received:</strong> {($audio.streamingAudio.bytesReceived / 1024 / 1024).toFixed(2)} MB
-                            {$audio.streamingAudio.isStreaming && <span> 🔄 (streaming...)</span>}
-                        </p>
-                        {$audio.streamingAudio.duration && (
-                            <p>
-                                <strong>Duration:</strong> {$audio.streamingAudio.duration.toFixed(2)}s |
-                                <strong> State:</strong> {
-                                    $audio.streamingAudio.isPlaying ? ' ▶️ Playing' :
-                                        $audio.streamingAudio.isPaused ? ' ⏸️ Paused' :
-                                            ' ⏹️ Stopped'
-                                }
-                            </p>
-                        )}
-                        <p><small>💡 Audio starts playing as soon as first chunks arrive from server</small></p>
-                    </div>
-                )}
-            </div>
-
-
+            {/* Audio Features in Separate Component */}
+            <MyApp3Audio demoModule={$core.demoModule} isLoggedIn={$core.isLoggedIn} />
 
             <div className="demo-section">
                 <button onClick={clearResults} className="clear-button">
