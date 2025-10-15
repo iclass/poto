@@ -178,6 +178,63 @@ export function MyApp3({
         };
     });
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PROPERTY WATCHERS - Demo of $watch() for selective persistence
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Only watch business state that's worth persisting (not UI state!)
+    
+    // Load saved values on mount
+    const savedUser = localStorage.getItem('myapp3:lastUser');
+    if (savedUser) {
+        $.currentUser = savedUser;
+        console.log('📂 Restored user:', savedUser);
+    }
+    
+    const savedDraft = localStorage.getItem('myapp3:messageDraft');
+    if (savedDraft) {
+        $.messageInput = savedDraft;
+        console.log('📂 Restored message draft');
+    }
+    
+    const savedAudioPref = localStorage.getItem('myapp3:autoPlayAudio');
+    if (savedAudioPref !== null) {
+        $.autoPlayAudio = savedAudioPref === 'true';
+        console.log('📂 Restored audio preference:', savedAudioPref);
+    }
+    
+    // Watch currentUser - persist logged-in user
+    $.$watch('currentUser', (user, prevUser) => {
+        if (user) {
+            localStorage.setItem('myapp3:lastUser', user);
+            console.log('💾 User saved to localStorage:', user);
+        } else if (prevUser) {
+            // User logged out
+            localStorage.removeItem('myapp3:lastUser');
+            console.log('🗑️  User removed from localStorage');
+        }
+    });
+    
+    // Watch messageInput - save message draft (with extra debounce)
+    $.$watch('messageInput', (message) => {
+        if (message) {
+            localStorage.setItem('myapp3:messageDraft', message);
+            console.log('💾 Message draft saved (length:', message.length, ')');
+        }
+    }, { debounce: 500 }); // Extra 500ms debounce on top of 50ms state debounce
+    
+    // Watch autoPlayAudio - save user preference
+    $.$watch('autoPlayAudio', (enabled) => {
+        localStorage.setItem('myapp3:autoPlayAudio', String(enabled));
+        console.log('💾 Audio preference saved:', enabled ? 'ON' : 'OFF');
+    });
+    
+    // Note: We DON'T watch UI state like:
+    // - loading (transient)
+    // - results (fetched fresh)
+    // - downloadResults (transient)
+    // - selectedFile (can't serialize File objects)
+    // - computed values (derived, not stored)
+
     const login = async (username: string, password: string) => {
         if (!$.client) return;
 
@@ -760,6 +817,18 @@ export function MyApp3({
                 <p><strong>Status:</strong> {$.isConnected ? '✅ Connected' : '❌ Disconnected'}</p>
                 <p><strong>Port:</strong> {Constants.port}</p>
                 <p><strong>Current User:</strong> {$.currentUser || 'Not logged in'}</p>
+            </div>
+
+            <div className="info" style={{ backgroundColor: '#e8f5e9', borderColor: '#4caf50' }}>
+                <h3>🔍 Property Watchers Demo</h3>
+                <p><small>
+                    Active watchers: <strong>currentUser</strong>, <strong>messageInput</strong>, <strong>autoPlayAudio</strong>
+                </small></p>
+                <p><small>
+                    ✅ Check console to see watchers firing!<br/>
+                    ✅ Refresh page to see persisted values restored<br/>
+                    ✅ Message draft has 500ms debounce (stop typing to trigger)
+                </small></p>
             </div>
 
             {$.results.error && (
