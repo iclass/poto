@@ -79,7 +79,7 @@ export function MyApp3Audio({ demoModule, isLoggedIn }: MyApp3AudioProps) {
 
         try {
             // Download audio as a single blob
-            const audioBlob: Blob = await demoModule.downloadAudio();
+            const audioBlob: Blob = await demoModule.downloadAudioFile();
             console.log('📦 Audio downloaded:', audioBlob.size, 'bytes');
 
             // Create object URL for playback
@@ -156,7 +156,7 @@ export function MyApp3Audio({ demoModule, isLoggedIn }: MyApp3AudioProps) {
             }
 
             // Get ReadableStream from server
-            const stream: ReadableStream<Uint8Array> = await demoModule.streamAudio();
+            const stream: ReadableStream<Uint8Array> = await demoModule.streamAudioFile();
             const reader = stream.getReader();
 
             // Feed chunks to MSE player
@@ -200,7 +200,7 @@ export function MyApp3Audio({ demoModule, isLoggedIn }: MyApp3AudioProps) {
             $audio.streamingAudio.bytesReceived = 0;
 
             // Get ReadableStream from server
-            const stream: ReadableStream<Uint8Array> = await demoModule.streamAudio();
+            const stream: ReadableStream<Uint8Array> = await demoModule.streamAudioFile();
             const reader = stream.getReader();
 
             // Feed chunks to streaming player
