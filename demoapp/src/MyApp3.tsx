@@ -4,6 +4,7 @@ import type { DemoModule } from "./DemoModule";
 import { makeState } from "./ReactiveState";
 import { MSEAudioPlayer } from "./MSEAudioPlayer";
 import { StreamingAudioPlayer } from "./StreamingAudioPlayer";
+import { useEffect } from "react";
 
 // Store MSE player at module level to persist across renders
 let msePlayer: MSEAudioPlayer | undefined;
@@ -182,51 +183,62 @@ export function MyApp3({
     // PROPERTY WATCHERS - Demo of $watch() for selective persistence
     // ═══════════════════════════════════════════════════════════════════════════
     // Only watch business state that's worth persisting (not UI state!)
+    // Runs ONCE on mount (empty dependency array)
     
-    // Load saved values on mount
-    const savedUser = localStorage.getItem('myapp3:lastUser');
-    if (savedUser) {
-        $.currentUser = savedUser;
-        console.log('📂 Restored user:', savedUser);
-    }
-    
-    const savedDraft = localStorage.getItem('myapp3:messageDraft');
-    if (savedDraft) {
-        $.messageInput = savedDraft;
-        console.log('📂 Restored message draft');
-    }
-    
-    const savedAudioPref = localStorage.getItem('myapp3:autoPlayAudio');
-    if (savedAudioPref !== null) {
-        $.autoPlayAudio = savedAudioPref === 'true';
-        console.log('📂 Restored audio preference:', savedAudioPref);
-    }
-    
-    // Watch currentUser - persist logged-in user
-    $.$watch('currentUser', (user, prevUser) => {
-        if (user) {
-            localStorage.setItem('myapp3:lastUser', user);
-            console.log('💾 User saved to localStorage:', user);
-        } else if (prevUser) {
-            // User logged out
-            localStorage.removeItem('myapp3:lastUser');
-            console.log('🗑️  User removed from localStorage');
+    useEffect(() => {
+        // Load saved values on mount
+        const savedUser = localStorage.getItem('myapp3:lastUser');
+        if (savedUser) {
+            $.currentUser = savedUser;
+            console.log('📂 Restored user:', savedUser);
         }
-    });
-    
-    // Watch messageInput - save message draft (with extra debounce)
-    $.$watch('messageInput', (message) => {
-        if (message) {
-            localStorage.setItem('myapp3:messageDraft', message);
-            console.log('💾 Message draft saved (length:', message.length, ')');
+        
+        const savedDraft = localStorage.getItem('myapp3:messageDraft');
+        if (savedDraft) {
+            $.messageInput = savedDraft;
+            console.log('📂 Restored message draft');
         }
-    }, { debounce: 500 }); // Extra 500ms debounce on top of 50ms state debounce
-    
-    // Watch autoPlayAudio - save user preference
-    $.$watch('autoPlayAudio', (enabled) => {
-        localStorage.setItem('myapp3:autoPlayAudio', String(enabled));
-        console.log('💾 Audio preference saved:', enabled ? 'ON' : 'OFF');
-    });
+        
+        const savedAudioPref = localStorage.getItem('myapp3:autoPlayAudio');
+        if (savedAudioPref !== null) {
+            $.autoPlayAudio = savedAudioPref === 'true';
+            console.log('📂 Restored audio preference:', savedAudioPref);
+        }
+        
+        // Watch currentUser - persist logged-in user
+        const unwatchUser = $.$watch('currentUser', (user, prevUser) => {
+            if (user) {
+                localStorage.setItem('myapp3:lastUser', user);
+                console.log('💾 User saved to localStorage:', user);
+            } else if (prevUser) {
+                // User logged out
+                localStorage.removeItem('myapp3:lastUser');
+                console.log('🗑️  User removed from localStorage');
+            }
+        });
+        
+        // Watch messageInput - save message draft (with extra debounce)
+        const unwatchDraft = $.$watch('messageInput', (message) => {
+            if (message) {
+                localStorage.setItem('myapp3:messageDraft', message);
+                console.log('💾 Message draft saved (length:', message.length, ')');
+            }
+        }, { debounce: 500 }); // Extra 500ms debounce on top of 50ms state debounce
+        
+        // Watch autoPlayAudio - save user preference
+        const unwatchAudio = $.$watch('autoPlayAudio', (enabled) => {
+            localStorage.setItem('myapp3:autoPlayAudio', String(enabled));
+            console.log('💾 Audio preference saved:', enabled ? 'ON' : 'OFF');
+        });
+        
+        // Cleanup watchers on unmount
+        return () => {
+            unwatchUser();
+            unwatchDraft();
+            unwatchAudio();
+            console.log('🧹 Watchers cleaned up');
+        };
+    }, []); // Empty array = run once on mount, cleanup on unmount
     
     // Note: We DON'T watch UI state like:
     // - loading (transient)
