@@ -4,7 +4,6 @@ import type { DemoModule } from "./DemoModule";
 import { makeState } from "./ReactiveState";
 import { MSEAudioPlayer } from "./MSEAudioPlayer";
 import { StreamingAudioPlayer } from "./StreamingAudioPlayer";
-import { useEffect } from "react";
 
 // Store MSE player at module level to persist across renders
 let msePlayer: MSEAudioPlayer | undefined;
@@ -23,11 +22,22 @@ export function MyApp3({
 
         console.log('✅ Poto client initialized');
 
+        // ═══════════════════════════════════════════════════════════════════════
+        // LOAD SAVED VALUES from localStorage
+        // ═══════════════════════════════════════════════════════════════════════
+        const savedUser = localStorage.getItem('myapp3:lastUser') || '';
+        const savedDraft = localStorage.getItem('myapp3:messageDraft');
+        const savedAudioPref = localStorage.getItem('myapp3:autoPlayAudio');
+        
+        if (savedUser) console.log('📂 Restored user:', savedUser);
+        if (savedDraft) console.log('📂 Restored message draft');
+        if (savedAudioPref !== null) console.log('📂 Restored audio preference:', savedAudioPref);
+
         return {
             state: {
                 client: potoClient,
                 demoModule: module,
-                currentUser: '',
+                currentUser: savedUser,
                 loading: false,
                 results: {
                     greeting: undefined as string | undefined,
@@ -49,9 +59,9 @@ export function MyApp3({
                     staticUrlTime: undefined as number | undefined,
                     fileSize: undefined as number | undefined,
                 },
-                messageInput: 'Hello from the frontend!',
+                messageInput: savedDraft || 'Hello from the frontend!',
                 selectedFile: null as File | null,
-                autoPlayAudio: true,
+                autoPlayAudio: savedAudioPref === 'false' ? false : true, // default true unless explicitly false
                 webAudio: {
                     isPlaying: false,
                     isPaused: false,
@@ -174,78 +184,48 @@ export function MyApp3({
             },
             cleanup: () => {
                 potoClient.unsubscribe();
-                console.log('🧹 Cleaned up client');
+                console.log('🧹 Poto client cleaned up');
             }
         };
     });
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // PROPERTY WATCHERS - Demo of $watch() for selective persistence
+    // PROPERTY WATCHERS - Just call directly, automatic re-entry protection!
     // ═══════════════════════════════════════════════════════════════════════════
-    // Only watch business state that's worth persisting (not UI state!)
-    // Runs ONCE on mount (empty dependency array)
+    // makeState() runs once (via useRef), but this component body runs every render.
+    // $.watch() is IDEMPOTENT - first call sets up watchers, subsequent calls no-op.
+    // Result: Clean procedural code, no useEffect, no module-level flags needed!
     
-    useEffect(() => {
-        // Load saved values on mount
-        const savedUser = localStorage.getItem('myapp3:lastUser');
-        if (savedUser) {
-            $.currentUser = savedUser;
-            console.log('📂 Restored user:', savedUser);
-        }
-        
-        const savedDraft = localStorage.getItem('myapp3:messageDraft');
-        if (savedDraft) {
-            $.messageInput = savedDraft;
-            console.log('📂 Restored message draft');
-        }
-        
-        const savedAudioPref = localStorage.getItem('myapp3:autoPlayAudio');
-        if (savedAudioPref !== null) {
-            $.autoPlayAudio = savedAudioPref === 'true';
-            console.log('📂 Restored audio preference:', savedAudioPref);
-        }
-        
-        // Watch currentUser - persist logged-in user
-        const unwatchUser = $.$watch('currentUser', (user, prevUser) => {
+    $.$watch({
+        // ✅ Simple syntax - just the handler function (no options needed)
+        currentUser: (user, prevUser) => {
             if (user) {
                 localStorage.setItem('myapp3:lastUser', user);
                 console.log('💾 User saved to localStorage:', user);
             } else if (prevUser) {
-                // User logged out
                 localStorage.removeItem('myapp3:lastUser');
                 console.log('🗑️  User removed from localStorage');
             }
-        });
+        },
         
-        // Watch messageInput - save message draft (with extra debounce)
-        const unwatchDraft = $.$watch('messageInput', (message) => {
-            if (message) {
-                localStorage.setItem('myapp3:messageDraft', message);
-                console.log('💾 Message draft saved (length:', message.length, ')');
-            }
-        }, { debounce: 500 }); // Extra 500ms debounce on top of 50ms state debounce
+        // ✅ Full syntax - when you need options like debounce
+        messageInput: {
+            handler: (message) => {
+                if (message) {
+                    localStorage.setItem('myapp3:messageDraft', message);
+                    console.log('💾 Message draft saved (length:', message.length, ')');
+                }
+            },
+            debounce: 500  // Extra 500ms on top of 50ms state debounce
+        },
         
-        // Watch autoPlayAudio - save user preference
-        const unwatchAudio = $.$watch('autoPlayAudio', (enabled) => {
+        // ✅ Simple syntax - clean and concise!
+        autoPlayAudio: (enabled) => {
             localStorage.setItem('myapp3:autoPlayAudio', String(enabled));
             console.log('💾 Audio preference saved:', enabled ? 'ON' : 'OFF');
-        });
-        
-        // Cleanup watchers on unmount
-        return () => {
-            unwatchUser();
-            unwatchDraft();
-            unwatchAudio();
-            console.log('🧹 Watchers cleaned up');
-        };
-    }, []); // Empty array = run once on mount, cleanup on unmount
+        }
+    });
     
-    // Note: We DON'T watch UI state like:
-    // - loading (transient)
-    // - results (fetched fresh)
-    // - downloadResults (transient)
-    // - selectedFile (can't serialize File objects)
-    // - computed values (derived, not stored)
 
     const login = async (username: string, password: string) => {
         if (!$.client) return;

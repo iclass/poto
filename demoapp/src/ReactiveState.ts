@@ -173,6 +173,8 @@ export class ReactiveState<T extends Record<string, any>> {
     private watchers: Map<string | symbol, Set<PropertyWatcher<any>>> = new Map();
     // Store last values for comparison
     private lastValues: Map<string | symbol, any> = new Map();
+    // Track if watchMany was already called (idempotent guard)
+    private watchManyInitialized: boolean = false;
     
     // ═════════════════════════════════════════════════════════════════════════
     // THE REACTIVE PROXY
@@ -584,7 +586,87 @@ export class ReactiveState<T extends Record<string, any>> {
      * @param options - Optional configuration
      * @returns Unwatch function - call to stop watching
      */
+    /**
+     * Watch properties for changes - convenient for initialization!
+     * 
+     * IDEMPOTENT: Can be called multiple times, but only the first call has effect.
+     * This allows you to call it directly in component body without guards!
+     * 
+     * FLEXIBLE SYNTAX: Use simple function OR full config object:
+     * 
+     * @example
+     * ```typescript
+     * const $ = makeState({ ... });
+     * 
+     * $.watch({
+     *   // ✅ Simple syntax - just the handler function
+     *   currentUser: (user, prev) => localStorage.setItem('user', user || ''),
+     *   
+     *   // ✅ Full syntax - with options
+     *   messageInput: {
+     *     handler: (msg) => saveDraft(msg),
+     *     debounce: 500,
+     *     immediate: true
+     *   }
+     * });
+     * 
+     * // Even if component re-renders and this code runs again,
+     * // watchers are only set up once (automatic re-entry protection)
+     * ```
+     */
     watch<K extends keyof T>(
+        watchMap: {
+            [P in K]: 
+                | ((newValue: T[P], oldValue: T[P]) => void)  // Simple: just function
+                | {                                              // Full: config object
+                    handler: (newValue: T[P], oldValue: T[P]) => void;
+                    debounce?: number;
+                    immediate?: boolean;
+                  }
+        }
+    ): Record<K, () => void> {
+        // ═════════════════════════════════════════════════════════════════════════
+        // IDEMPOTENT GUARD - Only initialize watchers once
+        // ═════════════════════════════════════════════════════════════════════════
+        // This makes $.watch() safe to call in component body without useEffect
+        // First call: Sets up watchers and returns unwatcher functions
+        // Subsequent calls: Returns empty object, no-op
+        if (this.watchManyInitialized) {
+            console.log('⚠️  $.watch() already called - skipping duplicate setup');
+            return {} as Record<K, () => void>;
+        }
+        
+        this.watchManyInitialized = true;
+        const unwatchers = {} as Record<K, () => void>;
+        
+        for (const [property, config] of Object.entries(watchMap) as Array<[K, any]>) {
+            // Support both syntaxes:
+            // 1. Simple: property: (val) => { ... }
+            // 2. Full:   property: { handler: (val) => { ... }, debounce: 500 }
+            
+            if (typeof config === 'function') {
+                // Simple syntax - just a function
+                unwatchers[property] = this.watchSingle(property, config);
+            } else {
+                // Full syntax - object with handler and options
+                unwatchers[property] = this.watchSingle(
+                    property,
+                    config.handler,
+                    {
+                        debounce: config.debounce,
+                        immediate: config.immediate
+                    }
+                );
+            }
+        }
+        
+        return unwatchers;
+    }
+
+    /**
+     * Internal method: Watch a single property
+     */
+    private watchSingle<K extends keyof T>(
         property: K,
         callback: (newValue: T[K], oldValue: T[K]) => void,
         options: WatchOptions = {}
@@ -631,7 +713,10 @@ export class ReactiveState<T extends Record<string, any>> {
 /**
  * Type for state initialization result
  */
-type StateInitResult<T> = T | { state: T; cleanup?: () => void };
+type StateInitResult<T> = T | {
+    state: T;
+    cleanup?: () => void;
+};
 
 /**
  * Type for state initializer function
@@ -872,11 +957,37 @@ export type StateControls<T = any> = {
      * });
      * unwatch(); // Stop watching
      */
+    /**
+     * Watch properties for changes - convenient API for initialization
+     * 
+     * FLEXIBLE SYNTAX: Use simple function OR full config:
+     * IDEMPOTENT: Safe to call multiple times (only first call has effect)
+     * 
+     * @example
+     * ```typescript
+     * const unwatchers = $.watch({
+     *   // Simple syntax
+     *   currentUser: (user) => saveUser(user),
+     *   
+     *   // Full syntax with options
+     *   messageInput: {
+     *     handler: (msg) => saveDraft(msg),
+     *     debounce: 500
+     *   }
+     * });
+     * ```
+     */
     $watch: <K extends keyof T>(
-        property: K,
-        callback: (newValue: T[K], oldValue: T[K]) => void,
-        options?: WatchOptions
-    ) => () => void;
+        watchMap: {
+            [P in K]: 
+                | ((newValue: T[P], oldValue: T[P]) => void)
+                | {
+                    handler: (newValue: T[P], oldValue: T[P]) => void;
+                    debounce?: number;
+                    immediate?: boolean;
+                  }
+        }
+    ) => Record<K, () => void>;
 };
 
 /**
@@ -1123,10 +1234,16 @@ export function makeState<T extends Record<string, any>>(
         state.$setDebounce = (delayMs: number) => stateManager.current!.setDebounce(delayMs);
         state.$flush = () => stateManager.current!.flush();
         state.$watch = <K extends keyof T>(
-            property: K,
-            callback: (newValue: T[K], oldValue: T[K]) => void,
-            options?: WatchOptions
-        ) => stateManager.current!.watch(property, callback, options);
+            watchMap: {
+                [P in K]: 
+                    | ((newValue: T[P], oldValue: T[P]) => void)
+                    | {
+                        handler: (newValue: T[P], oldValue: T[P]) => void;
+                        debounce?: number;
+                        immediate?: boolean;
+                      }
+            }
+        ) => stateManager.current!.watch(watchMap);
     }
     
     return state as T & StateControls<T>;
