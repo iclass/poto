@@ -177,6 +177,8 @@ export class ReactiveState<T extends Record<string, any>> {
     private watchManyInitialized: boolean = false;
     // Cached empty object - reuse on subsequent watch() calls (avoid creating many {})
     private readonly EMPTY_UNWATCHERS = Object.freeze({});
+    // Track if cleanup was already set via fluent API
+    private cleanupInitialized: boolean = false;
     
     // ═════════════════════════════════════════════════════════════════════════
     // THE REACTIVE PROXY
@@ -1033,19 +1035,20 @@ export type StateControls<T = any> = {
     ) => T & StateControls<T>;
     
     /**
-     * Builder-style cleanup - registers cleanup function and returns state for chaining
+     * Register cleanup function (runs on component unmount)
      * 
      * Alternative to passing cleanup in the initializer function.
      * Perfect for fluent/builder pattern with makeState().
+     * Matches React lifecycle naming (componentWillUnmount).
      * 
      * @example
      * ```typescript
      * const $ = makeState({ client })
-     *     .$withCleanup(() => client.disconnect())
+     *     .$onUnmount(() => client.disconnect())
      *     .$withWatch({ ... });
      * ```
      */
-    $withCleanup: (cleanup: () => void) => T & StateControls<T>;
+    $onUnmount: (cleanup: () => void) => T & StateControls<T>;
 };
 
 /**
@@ -1314,12 +1317,17 @@ export function makeState<T extends Record<string, any>>(
                       }
             }
         ) => {
+            // No explicit guard needed here - watch() is idempotent internally
             stateManager.current!.watch(watchMap);
             return state as T & StateControls<T>;
         };
         
-        state.$withCleanup = (cleanup: () => void) => {
-            cleanupRef.current = cleanup;
+        state.$onUnmount = (cleanup: () => void) => {
+            // Idempotent guard - only set cleanup once
+            if (!(stateManager.current as any).cleanupInitialized) {
+                cleanupRef.current = cleanup;
+                (stateManager.current as any).cleanupInitialized = true;
+            }
             return state as T & StateControls<T>;
         };
     }

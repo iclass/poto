@@ -22,40 +22,28 @@ export function MyApp3({
     // • Each has its own debounce/batch/watch settings
     // • Each re-renders independently
     // • Much easier to reason about and maintain!
-
-    // ─────────────────────────────────────────────────────────────────────────────
-    // CONNECTION & AUTH STATE - Core infrastructure
-    // ─────────────────────────────────────────────────────────────────────────────
     // ═════════════════════════════════════════════════════════════════════════════
     // FLUENT BUILDER API - Initialize, setup cleanup, and watch in one chain!
     // ═════════════════════════════════════════════════════════════════════════════
-    const potoClient = new PotoClient(`${host}:${port}`);
-    const savedUser = localStorage.getItem('myapp3:lastUser') || '';
-    
-    console.log('✅ Poto client initialized');
-    if (savedUser) console.log('📂 Restored user:', savedUser);
-    
-    const $core = makeState({
-        client: potoClient,
-        demoModule: potoClient.getProxy(Constants.serverModuleName) as DemoModule,
-        currentUser: savedUser,
+    const $core = makeState(() => {
+        const potoClient = new PotoClient(`${host}:${port}`);
+        const savedUser = localStorage.getItem('myapp3:lastUser') || '';
+        
+        console.log('✅ Poto client initialized');
+        if (savedUser) console.log('📂 Restored user:', savedUser);
+        
+        return {
+            client: potoClient,
+            demoModule: potoClient.getProxy(Constants.serverModuleName) as DemoModule,
+            currentUser: savedUser,
 
-        // Computed values
-        get isConnected() {
-            return !!this.client && !!this.demoModule;
-        },
-        get isLoggedIn() {
-            return !!this.currentUser;
-        },
-    } as {
-        client: PotoClient;
-        demoModule: DemoModule;
-        currentUser: string;
-        readonly isConnected: boolean;
-        readonly isLoggedIn: boolean;
+            get isLoggedIn(): boolean {
+                return !!$core.client?.userId && !!$core.client?.token;
+            },
+        };
     })
-    .$withCleanup(() => {
-        potoClient.unsubscribe();
+    .$onUnmount(() => {
+        $core.client.unsubscribe();
         console.log('🧹 Poto client cleaned up');
     })
     .$withWatch({
@@ -72,39 +60,48 @@ export function MyApp3({
 
 
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // UI STATE - Form inputs, loading state, file selection
+    // ─────────────────────────────────────────────────────────────────────────────
     const $ui = makeState(() => {
-        // ─────────────────────────────────────────────────────────────────────────────
-        // UI STATE - Form inputs, loading state, file selection
-        // ─────────────────────────────────────────────────────────────────────────────
         const savedDraft = localStorage.getItem('myapp3:messageDraft');
         if (savedDraft) console.log('📂 Restored message draft');
 
         return {
-            state: {
-                loading: false,
-                messageInput: savedDraft || 'Hello from the frontend!',
-                selectedFile: null as File | null,
+            loading: false,
+            messageInput: savedDraft || 'Hello from the frontend!',
+            selectedFile: null as File | null,
 
-                // Computed values
-                get canInteract(): boolean {
-                    return !this.loading && $core.isConnected && $core.isLoggedIn;
-                },
-                get hasFile(): boolean {
-                    return !!this.selectedFile;
-                },
-                get canUpload(): boolean {
-                    return this.canInteract && this.hasFile;
-                },
-                get fileDisplaySize(): string {
-                    if (!this.selectedFile) return '';
-                    const bytes: number = this.selectedFile.size;
-                    if (bytes < 1024) return `${bytes} B`;
-                    const kb = bytes / 1024;
-                    if (kb < 1024) return `${kb.toFixed(2)} KB`;
-                    return `${(kb / 1024).toFixed(2)} MB`;
-                },
-            }
-        }
+            // Computed values
+            get canInteract(): boolean {
+                return !$ui.loading && $core.isLoggedIn;
+            },
+            get hasFile(): boolean {
+                return !!$ui.selectedFile;
+            },
+            get canUpload(): boolean {
+                return $ui.canInteract && $ui.hasFile;
+            },
+            get fileDisplaySize(): string {
+                if (!$ui.selectedFile) return '';
+                const bytes: number = $ui.selectedFile.size;
+                if (bytes < 1024) return `${bytes} B`;
+                const kb = bytes / 1024;
+                if (kb < 1024) return `${kb.toFixed(2)} KB`;
+                return `${(kb / 1024).toFixed(2)} MB`;
+            },
+        };
+    })
+    .$withWatch({
+        messageInput: {
+            handler: (message) => {
+                if (message) {
+                    localStorage.setItem('myapp3:messageDraft', message);
+                    console.log('💾 [$ui] Draft saved (length:', message.length, ')');
+                }
+            },
+            debounce: 500
+        },
     });
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -165,86 +162,64 @@ export function MyApp3({
         },
     })
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // AUDIO STATE - Web Audio & Streaming Audio players
+    // ─────────────────────────────────────────────────────────────────────────────
     const $audio = makeState(() => {
-        // ─────────────────────────────────────────────────────────────────────────────
-        // AUDIO STATE - Web Audio & Streaming Audio players
-        // ─────────────────────────────────────────────────────────────────────────────
         const savedAudioPref = localStorage.getItem('myapp3:autoPlayAudio');
         if (savedAudioPref !== null) console.log('📂 Restored audio preference:', savedAudioPref);
+
         return {
-            state: {
-                autoPlayAudio: savedAudioPref === 'false' ? false : true,
-                webAudio: {
-                    isPlaying: false,
-                    isPaused: false,
-                    duration: undefined as number | undefined,
-                    sampleRate: undefined as number | undefined,
-                    channels: undefined as number | undefined,
-                    startTime: 0,
-                    pauseTime: 0,
-                },
-                streamingAudio: {
-                    isPlaying: false,
-                    isPaused: false,
-                    duration: undefined as number | undefined,
-                    bytesReceived: 0,
-                    isStreaming: false,
-                },
-
-                // Computed values
-                get webAudioState(): 'playing' | 'paused' | 'stopped' {
-                    if (this.webAudio.isPlaying) return 'playing';
-                    if (this.webAudio.isPaused) return 'paused';
-                    return 'stopped';
-                },
-                get streamingAudioState(): 'streaming' | 'playing' | 'paused' | 'stopped' {
-                    if (this.streamingAudio.isStreaming) return 'streaming';
-                    if (this.streamingAudio.isPlaying) return 'playing';
-                    if (this.streamingAudio.isPaused) return 'paused';
-                    return 'stopped';
-                },
-                get hasWebAudioData(): boolean {
-                    return this.webAudio.duration !== undefined;
-                },
-                get hasStreamingAudioData(): boolean {
-                    return this.streamingAudio.duration !== undefined;
-                },
-                get streamingProgressDisplay(): string {
-                    if (!this.streamingAudio.bytesReceived) return '';
-                    const kb: number = this.streamingAudio.bytesReceived / 1024;
-                    if (kb < 1024) return `${kb.toFixed(2)} KB`;
-                    return `${(kb / 1024).toFixed(2)} MB`;
-                },
-            }
-        }
-    });
-
-    // ═════════════════════════════════════════════════════════════════════════════
-    // PROPERTY WATCHERS - Each state object can have its own watchers!
-    // ═════════════════════════════════════════════════════════════════════════════
-
-
-    // Watch $ui for draft persistence
-    $ui.$watch({
-        messageInput: {
-            handler: (message) => {
-                if (message) {
-                    localStorage.setItem('myapp3:messageDraft', message);
-                    console.log('💾 [$ui] Draft saved (length:', message.length, ')');
-                }
+            autoPlayAudio: savedAudioPref === 'false' ? false : true,
+            webAudio: {
+                isPlaying: false,
+                isPaused: false,
+                duration: undefined as number | undefined,
+                sampleRate: undefined as number | undefined,
+                channels: undefined as number | undefined,
+                startTime: 0,
+                pauseTime: 0,
             },
-            debounce: 500
-        },
-    });
+            streamingAudio: {
+                isPlaying: false,
+                isPaused: false,
+                duration: undefined as number | undefined,
+                bytesReceived: 0,
+                isStreaming: false,
+            },
 
-    // Watch $audio for preference persistence
-    $audio.$watch({
+            // Computed values
+            get webAudioState(): 'playing' | 'paused' | 'stopped' {
+                if ($audio.webAudio.isPlaying) return 'playing';
+                if ($audio.webAudio.isPaused) return 'paused';
+                return 'stopped';
+            },
+            get streamingAudioState(): 'streaming' | 'playing' | 'paused' | 'stopped' {
+                if ($audio.streamingAudio.isStreaming) return 'streaming';
+                if ($audio.streamingAudio.isPlaying) return 'playing';
+                if ($audio.streamingAudio.isPaused) return 'paused';
+                return 'stopped';
+            },
+            get hasWebAudioData(): boolean {
+                return $audio.webAudio.duration !== undefined;
+            },
+            get hasStreamingAudioData(): boolean {
+                return $audio.streamingAudio.duration !== undefined;
+            },
+            get streamingProgressDisplay(): string {
+                if (!$audio.streamingAudio.bytesReceived) return '';
+                const kb: number = $audio.streamingAudio.bytesReceived / 1024;
+                if (kb < 1024) return `${kb.toFixed(2)} KB`;
+                return `${(kb / 1024).toFixed(2)} MB`;
+            },
+        };
+    })
+    .$withWatch({
         autoPlayAudio: (enabled) => {
             localStorage.setItem('myapp3:autoPlayAudio', String(enabled));
             console.log('💾 [$audio] Preference saved:', enabled ? 'ON' : 'OFF');
         },
     });
-
 
     const login = async (username: string, password: string) => {
         if (!$core.client) return;
@@ -266,6 +241,21 @@ export function MyApp3({
         } finally {
             $ui.loading = false;
         }
+    };
+
+    const logout = () => {
+        if (!$core.client) return;
+        
+        // Clear client authentication
+        $core.client.userId = undefined;
+        $core.client.token = undefined;
+        
+        // Clear user and reset state
+        $core.currentUser = '';
+        $api.results.error = undefined;
+        $api.results.greeting = '';
+        
+        console.log('✅ Successfully logged out');
     };
 
     const getGreeting = async () => {
@@ -320,6 +310,7 @@ export function MyApp3({
         }
     };
 
+    const streamCount = 5;
     const testStream = async () => {
         if (!$core.demoModule) return;
 
@@ -329,9 +320,8 @@ export function MyApp3({
 
 
         try {
-            const stream = await $core.demoModule.testStream(3);
+            const stream = await $core.demoModule.testStream(streamCount);
             for await (const item of stream) {
-                // Direct assignment - UI updates in real-time!
                 $api.results.streamData.push(item);
             }
         } catch (error) {
@@ -825,7 +815,7 @@ export function MyApp3({
 
             <div className="info">
                 <h3>Connection Status 📡</h3>
-                <p><strong>Status:</strong> {$core.isConnected ? '✅ Connected' : '❌ Disconnected'}</p>
+                <p><strong>Status:</strong> {$core.isLoggedIn ? '✅ Logged In' : '❌ Not Logged In'}</p>
                 <p><strong>Port:</strong> {Constants.port}</p>
                 <p><strong>Current User:</strong> {$core.currentUser || 'Not logged in'}</p>
             </div>
@@ -854,15 +844,22 @@ export function MyApp3({
                 <div className="button-group">
                     <button
                         onClick={() => login(Constants.demoUser, Constants.demoPassword)}
-                        disabled={$ui.loading || !$core.isConnected}
+                        disabled={$ui.loading}
                     >
                         Login as Demo User
                     </button>
                     <button
                         onClick={() => login(Constants.adminUser, Constants.adminPassword)}
-                        disabled={$ui.loading || !$core.isConnected}
+                        disabled={$ui.loading}
                     >
                         Login as Admin
+                    </button>
+                    <button
+                        onClick={logout}
+                        disabled={$ui.loading || !$core.isLoggedIn}
+                        style={{ marginLeft: '20px', backgroundColor: '#d9534f' }}
+                    >
+                        Logout
                     </button>
                 </div>
             </div>
@@ -931,7 +928,7 @@ export function MyApp3({
                         onClick={testStream}
                         disabled={!$ui.canInteract}
                     >
-                        Test Stream (3 items)
+                        Test Stream ({streamCount} items)
                     </button>
                 </div>
 
