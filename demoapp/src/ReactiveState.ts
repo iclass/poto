@@ -640,7 +640,7 @@ export class ReactiveState<T extends Record<string, any>> {
         // First call: Sets up watchers and returns unwatcher functions
         // Subsequent calls: Returns cached empty object (no allocations!)
         if (this.watchManyInitialized) {
-            console.log('⚠️  $.watch() already called - skipping duplicate setup');
+            // console.log('⚠️  $.watch() already called - skipping duplicate setup');
             return this.EMPTY_UNWATCHERS as Record<K, () => void>;
         }
         
