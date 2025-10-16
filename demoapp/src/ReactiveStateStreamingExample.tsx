@@ -1,6 +1,3 @@
-import React, { useEffect } from 'react';
-import { makeState } from './ReactiveState';
-
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  * ReactiveState - Live Examples & Demonstrations
@@ -14,7 +11,12 @@ import { makeState } from './ReactiveState';
  * 5. Watchers - React to specific property changes (NEW!)
  * 
  * See ReactiveState.ts for detailed inline documentation and API reference.
+ * 
+ * JSX: React (default)
  */
+
+import React, { useEffect } from 'react';
+import { makeReactiveState } from './ReactiveState';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -25,7 +27,7 @@ import { makeState } from './ReactiveState';
  * when dependencies change. Eliminates manual synchronization bugs!
  */
 export function ComputedValuesExample() {
-    const $ = makeState({
+    const $ = makeReactiveState({
         firstName: 'John',
         lastName: 'Doe',
         age: 30,
@@ -142,7 +144,7 @@ export function ComputedValuesExample() {
  * Perfect for bulk updates where you don't want intermediate states to show.
  */
 export function BasicBatchingExample() {
-    const $ = makeState({
+    const $ = makeReactiveState({
         count: 0,
         name: '',
         active: false,
@@ -186,7 +188,7 @@ export function BasicBatchingExample() {
  * UI only updates after changes stop coming in for the debounce period.
  */
 export function DebouncedStreamingExample() {
-    const $ = makeState({
+    const $ = makeReactiveState({
         streamedText: '',
         chunkCount: 0,
         renderCount: 0
@@ -259,7 +261,7 @@ export function DebouncedStreamingExample() {
  * With debouncing, the UI updates smoothly every 50-100ms.
  */
 export function ChatStreamingExample() {
-    const $ = makeState({
+    const $ = makeReactiveState({
         message: '',
         isStreaming: false,
         tokenCount: 0
@@ -324,7 +326,7 @@ export function ChatStreamingExample() {
  * Batch processes incoming data, debounce controls UI update frequency.
  */
 export function CombinedExample() {
-    const $ = makeState({
+    const $ = makeReactiveState({
         messages: [] as string[],
         unreadCount: 0,
         lastUpdate: 0
@@ -376,7 +378,7 @@ export function CombinedExample() {
  * then manually flush when ready to show changes.
  */
 export function TemporaryDisableExample() {
-    const $ = makeState({
+    const $ = makeReactiveState({
         items: [] as number[],
         status: 'idle' as 'idle' | 'loading' | 'ready'
     });
@@ -425,7 +427,7 @@ export function TemporaryDisableExample() {
  * Watchers respect the state debounce - called when UI updates, not on every change.
  */
 export function PropertyWatchersExample() {
-    const $ = makeState({
+    const $ = makeReactiveState({
         theme: 'dark' as 'dark' | 'light',
         username: '',
         saveCount: 0,

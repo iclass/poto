@@ -1,0 +1,46 @@
+---
+alwaysApply: true
+---
+
+# Cursor AI Style Guide for POTO Project
+
+First of all, this is a bun TS runtime, therefore everything about running specific code or test code,  We use the bun technology stack, including bun run, bun test, bun install for package management etc.
+
+## Code Style Preferences
+
+### TypeScript
+- Use TypeScript for all new code
+- avoid `any`
+- Use type for object shapes
+- Use type aliases for unions and complex types
+
+### Naming Conventions
+- Classes: PascalCase (e.g., `PotoServer`, `MyModule`)
+- Functions/Methods: camelCase (e.g., `getUserSession`, `handleRequest`)
+- Constants: UPPER_SNAKE_CASE (e.g., `MAX_RETRIES`, `DEFAULT_PORT`)
+- Private properties: prefix with underscore (e.g., `_internalState`)
+
+### Comments
+- Write comments for complex logic
+- Document public APIs with JSDoc
+- Explain "why" not "what" in comments
+
+## Project-Specific Rules
+
+### Testing
+- use `bun test`
+- Write tests for new features
+- Include edge cases and error scenarios
+- Test concurrent behavior for modules
+
+## Communication Style
+- very important: we need to save token! 
+- Be concise and direct
+- Do not create documentation unless until I ask you to do so.
+- Ask for my confirm before you make significant changes
+- Explain changes when making them
+- Ask for clarification when requirements are unclear
+- do not make long summary. Short and up-to-the point summary is OK
+
+
+

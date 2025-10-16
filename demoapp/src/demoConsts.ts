@@ -9,6 +9,7 @@ export const Constants = {
     admin: 'admin',
   },
   sessionKey: 'a',
+  host: 'http://localhost',
   port: 3001,
 }
 

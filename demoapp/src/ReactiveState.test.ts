@@ -12,7 +12,7 @@ import { ReactiveState, createStateWithPatterns } from "./ReactiveState";
  * - Deep/nested object reactivity
  * - Edge cases (arrays, special objects)
  * 
- * NOTE: React-specific functionality (makeState, useReactiveState) is not
+ * NOTE: React-specific functionality (makeReactiveState, useReactiveState) is not
  * tested here as it requires React testing library and component mounting.
  */
 

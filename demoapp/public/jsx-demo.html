@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReactiveState JSX Demo - No React!</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        
+        .header h1 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        
+        .header ul {
+            list-style: none;
+            display: inline-block;
+            text-align: left;
+        }
+        
+        .header li {
+            padding: 5px 0;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 20px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .card h3 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+        }
+        
+        /* Counter */
+        .counter-widget .display {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        
+        .counter-widget .display p {
+            font-size: 1.2rem;
+            margin: 10px 0;
+        }
+        
+        .counter-widget .buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        
+        /* Todo List */
+        .todo-app .input-section {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .todo-app input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        
+        .todo-app .filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .todo-app .filters button {
+            flex: 1;
+        }
+        
+        .todo-app .filters button.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .todo-list {
+            list-style: none;
+            margin-bottom: 15px;
+        }
+        
+        .todo-list li {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+        }
+        
+        .todo-list li:hover {
+            border-color: #667eea;
+        }
+        
+        .todo-list li.completed {
+            opacity: 0.6;
+        }
+        
+        .todo-list li.completed .todo-text {
+            text-decoration: line-through;
+        }
+        
+        .todo-text {
+            flex: 1;
+        }
+        
+        .delete-btn {
+            background: #dc3545 !important;
+            padding: 5px 10px !important;
+        }
+        
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 15px;
+            border-top: 2px solid #e0e0e0;
+        }
+        
+        /* Login Form */
+        .login-form .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .login-form label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .login-form input[type="text"],
+        .login-form input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        
+        .login-form input.error {
+            border-color: #dc3545;
+        }
+        
+        .password-wrapper {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .password-wrapper input {
+            flex: 1;
+        }
+        
+        .error-message {
+            color: #dc3545;
+            font-size: 0.9rem;
+            display: block;
+            margin-top: 5px;
+        }
+        
+        .jsx-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 6px;
+            color: #155724;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        /* Dashboard */
+        .dashboard .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 8px;
+            text-align: center;
+            border: 3px solid transparent;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .actions {
+            text-align: center;
+        }
+        
+        /* Buttons */
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+        
+        strong {
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header (rendered via JSX) -->
+        <div id="header"></div>
+        
+        <!-- Components Grid -->
+        <div class="grid">
+            <!-- Counter Component -->
+            <div class="card">
+                <div id="counter-app"></div>
+            </div>
+            
+            <!-- Todo List Component -->
+            <div class="card">
+                <div id="todo-app"></div>
+            </div>
+            
+            <!-- Login Form Component -->
+            <div class="card">
+                <div id="login-app"></div>
+            </div>
+            
+            <!-- Dashboard Component -->
+            <div class="card">
+                <div id="dashboard-app"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load the compiled JSX demo -->
+    <script type="module">
+        // In production, this would be your bundled output
+        import { initAllExamples } from '../src/ReactiveJSX.demo.js';
+        
+        // Initialize all examples
+        const components = initAllExamples();
+        
+        console.log('✅ All JSX components loaded!');
+        console.log('📦 Zero React dependency!');
+        console.log('🎯 Using REAL JSX syntax!');
+    </script>
+</body>
+</html>
+

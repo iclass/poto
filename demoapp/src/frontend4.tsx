@@ -3,22 +3,32 @@ import { createRoot } from "react-dom/client";
 import { PotoClient } from 'poto';
 import { Constants, ServerInfo, GenData, ImageSize } from "./demoConsts";
 import type { DemoModule } from "./DemoModule";
-import { makeState } from "./ReactiveState";
+import { makeReactiveState } from "./ReactiveState";
 import { MyApp4 } from "./MyApp4";
 
 
 // the bundler makes sure the root is always there before this script is executed
 // therefore, we can render the app immediately
 const rootEl = document.getElementById("root");
-const root = createRoot(rootEl!);
+
+// Hot module reloading support - persist root across updates
+let root: ReturnType<typeof createRoot>;
+if (import.meta.hot?.data.root) {
+    root = import.meta.hot.data.root;
+} else {
+    root = createRoot(rootEl!);
+    if (import.meta.hot) {
+        import.meta.hot.data.root = root;
+    }
+}
+
 root.render(<MyApp4 />);
 console.log("now rendering MyApp4 with Proxy-based Reactive State");
 
+// Accept hot updates and re-render
 if (import.meta.hot) {
-    console.log("hot module reloading for MyApp4");
-    // With hot module reloading, `import.meta.hot.data` is persisted.
-    import.meta.hot.data.root ??= root;
-    // Persist the component instance to survive HMR
-    // const app = (import.meta.hot.data.app ??= new MyApp4({}));
-    // root.render(app.render());
+    import.meta.hot.accept(() => {
+        console.log("🔥 Hot module reloading for MyApp4");
+        root.render(<MyApp4 />);
+    });
 }

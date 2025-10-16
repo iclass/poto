@@ -1,3 +1,13 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * MyApp4 - ReactiveComponent Demo (React-based)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 
+ * Demonstrates ReactiveComponent class-based API with React
+ * 
+ * JSX: React (default)
+ */
+
 import "./styles.css";
 import { ReactiveComponent } from "./ReactiveState";
 
@@ -61,7 +71,7 @@ export class MyApp4 extends ReactiveComponent {
                 <ul>
                     <li>Just plain class properties: count = 0</li>
                     <li>Direct assignments: this.count++</li>
-                    <li>No setState, no hooks, no makeState</li>
+                    <li>No setState, no hooks, no makeReactiveState</li>
                     <li>Automatic UI updates via ReactiveComponent</li>
                 </ul>
             </div>

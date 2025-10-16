@@ -11,7 +11,7 @@
       "noEmit": true,
       
       // React/JSX configuration
-      "jsx": "react-jsx",
+      "jsx": "preserve",
       "jsxImportSource": "react",
       
       // Strict type checking

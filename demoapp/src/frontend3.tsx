@@ -8,7 +8,7 @@ import { MyApp3 } from "./MyApp3";
 // therefore, we can render the app immediately
 const rootEl = document.getElementById("root");
 const root = createRoot(rootEl!);
-root.render(<MyApp3 host={`http://localhost`} port={Constants.port} />);
+root.render(<MyApp3 />);
 console.log("now rendering MyApp3 with Proxy-based Reactive State");
 
 

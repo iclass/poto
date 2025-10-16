@@ -11,6 +11,7 @@ import indexhtml from '../public/index.html';
 import index4html from '../public/index4.html';
 import index3html from '../public/index3.html';
 import index5html from '../public/index5.html';
+import indexVanillahtml from '../public/indexVanilla.html';
 
 // Initialize and start the server
 async function startServer() {
@@ -23,7 +24,8 @@ async function startServer() {
             '/': indexhtml,
             '/3': index3html,
             '/4': index4html,
-            '/5': index5html
+            '/5': index5html,
+            '/vanilla': indexVanillahtml
         },
         development: {
             // Enable Hot Module Reloading
@@ -48,6 +50,7 @@ async function startServer() {
     console.log('   - http://localhost:3001 (Proxy Reactive - frontend3)');
     console.log('   - http://localhost:3001/4 (Class Component - frontend4)');
     console.log('   - http://localhost:3001/5 (Valtio - frontend5)');
+    console.log('   - http://localhost:3001/vanilla (🎯 Vanilla JSX - No React!)');
     console.log('👤 Demo users: demo/demo123, admin/admin123');
     console.log('');
 
