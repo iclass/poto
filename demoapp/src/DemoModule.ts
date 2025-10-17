@@ -150,27 +150,35 @@ export class DemoModule extends PotoModule {
     async downloadImageAsFile(): Promise<Blob> {
         return Bun.file(path.join(process.cwd(), 'public', 'logo.jpg'));
     }
-
-    async downloadImageAsArrayBuffer(): Promise<ArrayBuffer> {
-        const imagePath = path.join(process.cwd(), 'public', 'logo.jpg');
-        const buffer = await fs.promises.readFile(imagePath);
-        return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
-    }
-
     /**
-     * this is as faast as it can be since http supports Blob responses natively
+     * this is as fast as it can be since http supports Blob responses natively
      * @returns Blob of the audio file
      */
     async downloadAudioFile(): Promise<Blob> {
+        // // This method demonstrates loading file with BunFile -> ArrayBuffer -> Blob conversion (flip flop)
+        // const bunFile = Bun.file(path.join(process.cwd(), 'public', 'Caliente.mp3'));
+        // const arrayBuffer = await bunFile.arrayBuffer();
+        // // Create Blob from ArrayBuffer (type is best guess for mp3)
+        // const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+        // return blob;
+        console.log('downloadAudioFile, using BunFile');
         return Bun.file(path.join(process.cwd(), 'public', 'Caliente.mp3'));
     }
+
+
+    async downloadImageAsArrayBuffer(): Promise<ArrayBuffer> {
+        const imageFile = Bun.file(path.join(process.cwd(), 'public', 'logo.jpg'));
+        return imageFile.arrayBuffer();
+    }
+
 
     /**
      * Stream audio file as a pure ReadableStream - demonstrates true network streaming
      * where chunks are sent progressively over the wire
     // Bun.file().stream() returns a native ReadableStream - simple and efficient!
      */
-    async streamAudioFile(): Promise<ReadableStream<Uint8Array>> {       
+    async streamAudioFile(): Promise<ReadableStream<Uint8Array>> {   
+        console.log('streamAudioFile, using BunFile.stream');
         return (Bun.file(path.join(process.cwd(), 'public', 'Caliente.mp3'))).stream();
     }
 }

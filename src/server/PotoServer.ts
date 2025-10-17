@@ -825,34 +825,43 @@ export function createHttpHandler<T extends PotoModule>(
 			});
 		}
 
-		// Check if result is a Blob or File (direct binary response)
-		if (result instanceof Blob) {
-			const blobHeaders = new Headers({
-				"Content-Type": result.type || "application/octet-stream"
-			});
-			
-			// Indicate the original return type for client reconstruction
-			if ('name' in result && result.name) {
-				// It's a File - extract basename from potentially full path
-				const fileResult = result as File;
-				const fileName = path.basename(fileResult.name);
-				blobHeaders.set("X-Binary-Type", "File");
-				blobHeaders.set("X-File-Name", encodeURIComponent(fileName));
-				blobHeaders.set("X-File-LastModified", fileResult.lastModified.toString());
-				// Expose custom headers to client via CORS
-				blobHeaders.set("Access-Control-Expose-Headers", "X-Binary-Type, X-File-Name, X-File-LastModified");
-			} else {
-				// It's a Blob
-				blobHeaders.set("X-Binary-Type", "Blob");
-				// Expose custom headers to client via CORS
-				blobHeaders.set("Access-Control-Expose-Headers", "X-Binary-Type");
-			}
+		// Check if result is a Blob, File, or BunFile (direct binary response)
+		// Use duck typing to detect BunFile (has size, type, and stream properties but may not pass instanceof Blob)
+		const isBlobLike = result instanceof Blob || 
+			(result && typeof result === 'object' && 
+			 typeof result.size === 'number' && 
+			 typeof result.type === 'string' && 
+			 (typeof result.stream === 'function' || typeof result.arrayBuffer === 'function'));
+		
+	if (isBlobLike) {
+		const blobHeaders = new Headers({
+			"Content-Type": result.type || "application/octet-stream",
+			"Content-Length": result.size.toString()
+		});
+		
+		// Indicate the original return type for client reconstruction
+		if ('name' in result && result.name) {
+			// It's a File - extract basename from potentially full path
+			const fileResult = result as File;
+			const fileName = path.basename(fileResult.name);
+			blobHeaders.set("X-Binary-Type", "File");
+			blobHeaders.set("X-File-Name", encodeURIComponent(fileName));
+			blobHeaders.set("X-File-LastModified", fileResult.lastModified.toString());
+			// Expose custom headers to client via CORS
+			blobHeaders.set("Access-Control-Expose-Headers", "X-Binary-Type, X-File-Name, X-File-LastModified, Content-Length");
+		} else {
+			// It's a Blob or BunFile
+			blobHeaders.set("X-Binary-Type", "Blob");
+			// Expose custom headers to client via CORS
+			blobHeaders.set("Access-Control-Expose-Headers", "X-Binary-Type, Content-Length");
+		}
 			
 			// Merge session headers
 			sessionHeaders.forEach((value, key) => {
 				blobHeaders.set(key, value);
 			});
 			
+			// Bun's Response can handle BunFile natively and will stream it efficiently
 			return new Response(result, {
 				status: 200,
 				headers: blobHeaders,
@@ -1107,14 +1116,22 @@ function _containsBlobs(args: any[]): boolean {
 /**
  * Recursively check if an object contains Blobs or binary data
  * 
- * Detects Blobs, ArrayBuffers, and TypedArrays to trigger async serialization
+ * Detects Blobs, ArrayBuffers, TypedArrays, and BunFile to trigger async serialization
  * with native base64 encoding (much faster!).
  */
 function _hasBlob(obj: any, depth: number = 0, maxDepth: number = 10): boolean {
 	if (depth > maxDepth) return false;
 	
-	// Always use async for Blobs
+	// Always use async for Blobs and BunFile
 	if (obj instanceof Blob) return true;
+	
+	// Detect BunFile using duck typing (same as in response handler)
+	if (obj && typeof obj === 'object' && 
+	    typeof obj.size === 'number' && 
+	    typeof obj.type === 'string' && 
+	    (typeof obj.stream === 'function' || typeof obj.arrayBuffer === 'function')) {
+		return true;
+	}
 	
 	// Use async for binary data to leverage native Buffer.toString('base64')
 	// This provides much faster base64 encoding compared to JavaScript loops

@@ -687,23 +687,23 @@ export class PotoClient {
 						return stream;
 					}
 
-				// Check if this is a pure binary streaming response (video, audio, etc.)
-				if (contentType.startsWith("video/") || 
-				    contentType.startsWith("audio/") || 
-				    contentType.includes("application/octet-stream")) {
-					// Check if this is a streaming response (has body stream)
-					// vs a complete binary response (Blob/ArrayBuffer/TypedArray)
-					const contentLength = response.headers.get("Content-Length");
-					const binaryType = response.headers.get("X-Binary-Type");
+			// Check if this is a pure binary streaming response (video, audio, etc.)
+			if (contentType.startsWith("video/") || 
+			    contentType.startsWith("audio/") || 
+			    contentType.includes("application/octet-stream")) {
+				// Check if this is a streaming response (has body stream)
+				// vs a complete binary response (Blob/ArrayBuffer/TypedArray)
+				const binaryType = response.headers.get("X-Binary-Type");
+				
+				// If X-Binary-Type header is present, it's a complete binary response
+				// (Content-Length may not be readable due to browser restrictions)
+				// Otherwise, it's a stream (no X-Binary-Type header)
+				if (binaryType) {
+					// Complete binary response - reconstruct exact type based on X-Binary-Type header
 					
-					// If Content-Length is present, it's a complete binary response
-					// Otherwise, it's a stream
-					if (contentLength && binaryType) {
-						// Complete binary response - reconstruct exact type based on X-Binary-Type header
-						
-						if (binaryType === "Blob") {
-							return await response.blob();
-						}
+					if (binaryType === "Blob") {
+						return await response.blob();
+					}
 						
 						if (binaryType === "File") {
 							// Reconstruct as File with metadata
@@ -733,12 +733,12 @@ export class PotoClient {
 							
 							// Fallback to Uint8Array if constructor not found
 							return new Uint8Array(arrayBuffer);
-						}
 					}
-					
-					// Return the stream directly for pure binary streaming (no buffering)
+				} else {
+					// No X-Binary-Type header means true streaming response
 					return response.body as ReadableStream<Uint8Array>;
 				}
+			}
 
 					if (contentType.includes(PotoConstants.appJson)) {
 						const jsonText = await response.text();

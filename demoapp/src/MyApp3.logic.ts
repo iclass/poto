@@ -378,13 +378,12 @@ export function useMyApp3Logic(host: string = Constants.host, port: number = Con
     // ─────────────────────────────────────────────────────────────────────────────
 
     const downloadAsFile = async () => {
-        const demoModule = getServerModule();
-        if (!demoModule) return;
 
         $ui.loading = true;
         try {
             const startTime = performance.now();
-            const file = await demoModule.downloadImageAsFile();
+            const file = await (getServerModule()!).downloadImageAsFile();
+            console.log('downloadAsFile, file size:', file.size);
             const downloadTime = performance.now() - startTime;
 
             const fileUrl = URL.createObjectURL(file);

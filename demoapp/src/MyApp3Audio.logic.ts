@@ -221,9 +221,6 @@ export function useAudioFeatures(isLoggedIn: boolean) {
         if (!msePlayer) return;
 
         try {
-            // Reset all audio before starting new playback
-            resetAll();
-            
             await msePlayer.play();
             $audio.webAudio.isPlaying = true;
             $audio.webAudio.isPaused = false;
@@ -377,9 +374,6 @@ export function useAudioFeatures(isLoggedIn: boolean) {
     const playStreamingAudio = () => {
         if (!streamingPlayer) return;
 
-        // Reset all audio before starting new playback
-        resetAll();
-        
         streamingPlayer.play();
         $audio.streamingAudio.isPlaying = true;
         $audio.streamingAudio.isPaused = false;
