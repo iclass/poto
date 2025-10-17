@@ -157,6 +157,10 @@ export class DemoModule extends PotoModule {
         return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
     }
 
+    /**
+     * this is as faast as it can be since http supports Blob responses natively
+     * @returns Blob of the audio file
+     */
     async downloadAudioFile(): Promise<Blob> {
         return Bun.file(path.join(process.cwd(), 'public', 'Caliente.mp3'));
     }
