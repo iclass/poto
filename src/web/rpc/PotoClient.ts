@@ -16,13 +16,13 @@ export class PotoClient {
 	userId: string | undefined;
 	token: string | undefined
 
-	sseAborController:AbortController | undefined
+	sseAborController: AbortController | undefined
 
 	// Request cancellation control
 	private currentRequestAbortController: AbortController | null = null;
 	private autoCancelPreviousRequests: boolean = true;
 	private activeRequestCount: number = 0;
-	
+
 	// Per-request abort controller tracking for concurrent safety
 	private requestAbortControllers: Map<number, AbortController> = new Map();
 	private nextRequestId: number = 0;
@@ -136,33 +136,33 @@ export class PotoClient {
 	 * @returns Resolves when the user is successfully logged in.
 	 * @throws If the login fails.
 	 */
-async login(credentials: { username: string; password: string }): Promise<void> {
-	const url = `${this.baseUrl}/${PotoConstants.loginUrlPath}`;
-	const response = await fetch(url, {
-		method: "POST",
-		headers: { "Content-Type": PotoConstants.appJson },
-		body: stringifyTypedJson(credentials),
-	});
+	async login(credentials: { username: string; password: string }): Promise<void> {
+		const url = `${this.baseUrl}/${PotoConstants.loginUrlPath}`;
+		const response = await fetch(url, {
+			method: "POST",
+			headers: { "Content-Type": PotoConstants.appJson },
+			body: stringifyTypedJson(credentials),
+		});
 
-	if (!response.ok) {
-		const errorText = await response.text();
-		throw new Error(`Login failed: ${errorText}`);
-	}
+		if (!response.ok) {
+			const errorText = await response.text();
+			throw new Error(`Login failed: ${errorText}`);
+		}
 
-	const responseText = await response.text();
-	const data = parseTypedJson(responseText);  // Use TypedJSON parser to match server format
-	
-	// Defensive: Verify response structure
-	if (!data || typeof data !== 'object') {
-		throw new Error(`Login returned invalid data: ${responseText}`);
+		const responseText = await response.text();
+		const data = parseTypedJson(responseText);  // Use TypedJSON parser to match server format
+
+		// Defensive: Verify response structure
+		if (!data || typeof data !== 'object') {
+			throw new Error(`Login returned invalid data: ${responseText}`);
+		}
+		if (!data.userId || !data.token) {
+			throw new Error(`Login missing userId or token. Response: ${JSON.stringify(data)}`);
+		}
+
+		this.userId = data.userId;
+		this.token = data.token;
 	}
-	if (!data.userId || !data.token) {
-		throw new Error(`Login missing userId or token. Response: ${JSON.stringify(data)}`);
-	}
-	
-	this.userId = data.userId;
-	this.token = data.token;
-}
 
 	/**
 	 * Logs in as a visitor and retrieves a visitor ID and JWT token from the server.
@@ -181,43 +181,43 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 				// Attempt login with stored credentials
 				await this.login({ username: storedVisitorId, password: storedPassword });
 				return;
-		} catch (error) {
-			// Clear invalid stored credentials and fall through to re-registration
-			this.storage.removeItem("visitorId");
-			this.storage.removeItem("visitorPassword");
+			} catch (error) {
+				// Clear invalid stored credentials and fall through to re-registration
+				this.storage.removeItem("visitorId");
+				this.storage.removeItem("visitorPassword");
+			}
 		}
-	}
 
-	// Proceed with visitor registration if no valid credentials are found
-	const url = `${this.baseUrl}/${PotoConstants.registerAsTourist}`;
-	const response = await fetch(url, {
-		method: "POST",
-		headers: { "Content-Type": PotoConstants.appJson },
-	});
+		// Proceed with visitor registration if no valid credentials are found
+		const url = `${this.baseUrl}/${PotoConstants.registerAsTourist}`;
+		const response = await fetch(url, {
+			method: "POST",
+			headers: { "Content-Type": PotoConstants.appJson },
+		});
 
-	if (!response.ok) {
-		const errorText = await response.text();
-		throw new Error(`Visitor login failed: ${errorText}`);
-	}
+		if (!response.ok) {
+			const errorText = await response.text();
+			throw new Error(`Visitor login failed: ${errorText}`);
+		}
 
-	const responseText = await response.text();
-	const data = parseTypedJson(responseText);  // Use TypedJSON parser to match server format
-	
-	// Defensive: Verify response structure
-	if (!data || typeof data !== 'object') {
-		throw new Error(`Visitor registration returned invalid data: ${responseText}`);
-	}
-	if (!data.userId || !data.token) {
-		throw new Error(`Visitor registration missing userId or token. Response: ${JSON.stringify(data)}`);
-	}
-	
-	this.userId = data.userId;
-	this.token = data.token;
+		const responseText = await response.text();
+		const data = parseTypedJson(responseText);  // Use TypedJSON parser to match server format
 
-	// Store the visitor credentials in storage
-	this.storage.setItem(VISITOR_ID, data.userId);
-	this.storage.setItem(PASSWORD, data.pw || "");
-}
+		// Defensive: Verify response structure
+		if (!data || typeof data !== 'object') {
+			throw new Error(`Visitor registration returned invalid data: ${responseText}`);
+		}
+		if (!data.userId || !data.token) {
+			throw new Error(`Visitor registration missing userId or token. Response: ${JSON.stringify(data)}`);
+		}
+
+		this.userId = data.userId;
+		this.token = data.token;
+
+		// Store the visitor credentials in storage
+		this.storage.setItem(VISITOR_ID, data.userId);
+		this.storage.setItem(PASSWORD, data.pw || "");
+	}
 
 	/**
 	 * Subscribes to server-sent events
@@ -425,7 +425,7 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 				if (reader && typeof (reader as any).releaseLock === 'function') {
 					(reader as any).releaseLock();
 				}
-			} catch (_e) {}
+			} catch (_e) { }
 		}
 	}
 
@@ -439,24 +439,24 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 		const reader = stream.getReader();
 		const decoder = new TextDecoder();
 		let buffer = '';
-		
+
 		try {
 			while (true) {
 				const { done, value } = await reader.read();
 				if (done) break;
-				
+
 				const text = decoder.decode(value, { stream: true });
 				buffer += text;
-				
+
 				// Process complete JSON objects immediately
 				while (true) {
 					const newlineIndex = buffer.indexOf('\n');
 					if (newlineIndex === -1) break; // No complete lines
-					
+
 					// Extract complete line
 					const completeLine = buffer.substring(0, newlineIndex);
 					buffer = buffer.substring(newlineIndex + 1);
-					
+
 					const trimmedLine = completeLine.trim();
 					if (trimmedLine) {
 						try {
@@ -469,7 +469,7 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 					}
 				}
 			}
-			
+
 			// Process any remaining data in buffer
 			if (buffer.trim()) {
 				try {
@@ -487,7 +487,7 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 				if (reader && typeof (reader as any).releaseLock === 'function') {
 					(reader as any).releaseLock();
 				}
-			} catch (_e) {}
+			} catch (_e) { }
 		}
 	}
 
@@ -513,7 +513,7 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 	 * ReadableStream responses to AsyncGenerator for end-to-end type safety.
 	 * @throws If the request fails.
 	 */
-	getProxy<T extends object>(modulePrefix:string): T {
+	getProxy<T extends object>(modulePrefix: string): T {
 		return new Proxy({}, {
 			get: (_, propKey: string) => {
 				return async (...args: any[]) => {
@@ -521,12 +521,12 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 					const methodMatch = propKey.match(/^(get|post|put|delete)(.+)$/i);
 					let httpMethod: string;
 					let routePath: string;
-					
+
 					if (methodMatch) {
 						// Method starts with HTTP verb - use the existing convention
 						httpMethod = methodMatch[1].toLowerCase();
 						routePath = methodMatch[2].replace(/\$/g, '/').toLowerCase();
-						
+
 						// Force POST method for GET/DELETE methods that have arguments
 						// This prevents URL length issues when arguments are serialized in the URL path
 						if (args.length > 0 && (httpMethod === 'get' || httpMethod === 'delete')) {
@@ -566,75 +566,75 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 					}
 
 
-			// Handle automatic cancellation of previous requests
-			let signal: AbortSignal | undefined;
-			let requestArgs = args;
-			
-			// Assign unique request ID for concurrent safety
-			const requestId = this.nextRequestId++;
-			
-			// Check if user explicitly passed an AbortSignal
-			if (args.length > 0 && args[args.length - 1] instanceof AbortSignal) {
-				signal = args[args.length - 1] as AbortSignal;
-				requestArgs = args.slice(0, -1);
-			} else {
-				// CONCURRENT-SAFE: Create abort controller for each request
-				// Never cancel other requests when running concurrently
-				const abortController = new AbortController();
-				this.requestAbortControllers.set(requestId, abortController);
-				signal = abortController.signal;
-				
-				// Only store as "current" for manual cancellation via cancelCurrentRequest()
-				// But NEVER auto-cancel when there are other active requests
-				if (this.autoCancelPreviousRequests && this.activeRequestCount === 0) {
-					// Safe to set as current since no other requests are active
-					this.currentRequestAbortController = abortController;
-				}
-			}
+					// Handle automatic cancellation of previous requests
+					let signal: AbortSignal | undefined;
+					let requestArgs = args;
 
-				let options: RequestInit = {
-					method: httpMethod.toUpperCase(),
-					...(Object.keys(headers).length > 0 ? { headers } : {}),
-					...(signal && { signal })
-				};
+					// Assign unique request ID for concurrent safety
+					const requestId = this.nextRequestId++;
 
-				if (httpMethod === "get" || httpMethod === "delete") {
-					// Append each argument as a JSON-encoded path segment in the URL
-					requestArgs.forEach((arg) => {
-						const jsonArg = stringifyTypedJson(arg);
-						url += `/${encodeURIComponent(jsonArg)}`;
-					});
-				} else if (httpMethod === "post" || httpMethod === "put") {
-					// Check if any argument contains Blobs
-					const hasBlobs = this._containsBlobs(requestArgs);
-					if (hasBlobs) {
-						// Use async serialization for Blobs
-						const argsString = await stringifyTypedJsonAsync(requestArgs);
-						options.body = argsString;
+					// Check if user explicitly passed an AbortSignal
+					if (args.length > 0 && args[args.length - 1] instanceof AbortSignal) {
+						signal = args[args.length - 1] as AbortSignal;
+						requestArgs = args.slice(0, -1);
 					} else {
-						// Use sync serialization for non-Blob data
-						const argsString = stringifyTypedJson(requestArgs);
-						options.body = argsString;
-					}
-				}
+						// CONCURRENT-SAFE: Create abort controller for each request
+						// Never cancel other requests when running concurrently
+						const abortController = new AbortController();
+						this.requestAbortControllers.set(requestId, abortController);
+						signal = abortController.signal;
 
-				// Track request start
-				this.activeRequestCount++;
-				
-				// Log HTTP request if verbose mode is enabled
-				if (this.verboseCallback && this.verboseCallback()) {
-					console.log(`>> [${this.userId || 'anonymous'}] ${httpMethod.toUpperCase()} ${url}`);
-					if (options.body) {
-						console.log(`   Body: ${options.body}`);
+						// Only store as "current" for manual cancellation via cancelCurrentRequest()
+						// But NEVER auto-cancel when there are other active requests
+						if (this.autoCancelPreviousRequests && this.activeRequestCount === 0) {
+							// Safe to set as current since no other requests are active
+							this.currentRequestAbortController = abortController;
+						}
 					}
-					if (Object.keys(headers).length > 0) {
-						console.log(`   Headers: ${JSON.stringify(headers, null, 2)}`);
+
+					let options: RequestInit = {
+						method: httpMethod.toUpperCase(),
+						...(Object.keys(headers).length > 0 ? { headers } : {}),
+						...(signal && { signal })
+					};
+
+					if (httpMethod === "get" || httpMethod === "delete") {
+						// Append each argument as a JSON-encoded path segment in the URL
+						requestArgs.forEach((arg) => {
+							const jsonArg = stringifyTypedJson(arg);
+							url += `/${encodeURIComponent(jsonArg)}`;
+						});
+					} else if (httpMethod === "post" || httpMethod === "put") {
+						// Check if any argument contains Blobs
+						const hasBlobs = this._containsBlobs(requestArgs);
+						if (hasBlobs) {
+							// Use async serialization for Blobs
+							const argsString = await stringifyTypedJsonAsync(requestArgs);
+							options.body = argsString;
+						} else {
+							// Use sync serialization for non-Blob data
+							const argsString = stringifyTypedJson(requestArgs);
+							options.body = argsString;
+						}
 					}
-				}
-				
-			let response: Response;
-			try {
-				response = await fetch(url, options);
+
+					// Track request start
+					this.activeRequestCount++;
+
+					// Log HTTP request if verbose mode is enabled
+					if (this.verboseCallback && this.verboseCallback()) {
+						console.log(`>> [${this.userId || 'anonymous'}] ${httpMethod.toUpperCase()} ${url}`);
+						if (options.body) {
+							console.log(`   Body: ${options.body}`);
+						}
+						if (Object.keys(headers).length > 0) {
+							console.log(`   Headers: ${JSON.stringify(headers, null, 2)}`);
+						}
+					}
+
+					let response: Response;
+					try {
+						response = await fetch(url, options);
 
 						// Log HTTP response if verbose mode is enabled
 						if (this.verboseCallback && this.verboseCallback()) {
@@ -662,48 +662,129 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 							const errorText = await response.text();
 							throw { status: response.status, text: errorText };
 						}
-				} finally {
-					// Track request completion
-					this.activeRequestCount--;
-					// Clean up per-request abort controller
-					this.requestAbortControllers.delete(requestId);
-				}
+					} finally {
+						// Track request completion
+						this.activeRequestCount--;
+						// Clean up per-request abort controller
+						this.requestAbortControllers.delete(requestId);
+					}
 
 					const contentType = response.headers.get("Content-Type") || PotoConstants.appJson;
 					if (response.status === 204) { // no content, void return type in the endpoint method
 						return;
 					}
-					
+
 					// Check if this is a streaming response (SSE)
 					if (contentType.includes("text/event-stream")) {
 						const stream = response.body as ReadableStream<Uint8Array>;
-						
+
 						// If it's a generator method, convert to AsyncGenerator for type safety
 						if (response.headers.get("X-Response-Type") === "generator") {
 							return this.streamToGenerator(stream);
 						}
-						
+
 						// For regular ReadableStream methods, return the stream directly
 						return stream;
 					}
+
+				// Check if this is a pure binary streaming response (video, audio, etc.)
+				if (contentType.startsWith("video/") || 
+				    contentType.startsWith("audio/") || 
+				    contentType.includes("application/octet-stream")) {
+					// Check if this is a streaming response (has body stream)
+					// vs a complete binary response (Blob/ArrayBuffer/TypedArray)
+					const contentLength = response.headers.get("Content-Length");
+					const binaryType = response.headers.get("X-Binary-Type");
 					
-					// Check if this is a pure binary streaming response (video, audio, etc.)
-					if (contentType.startsWith("video/") || 
-					    contentType.startsWith("audio/") || 
-					    contentType.includes("application/octet-stream")) {
-						// Return the stream directly for pure binary streaming (no buffering)
-						return response.body as ReadableStream<Uint8Array>;
+					// If Content-Length is present, it's a complete binary response
+					// Otherwise, it's a stream
+					if (contentLength && binaryType) {
+						// Complete binary response - reconstruct exact type based on X-Binary-Type header
+						
+						if (binaryType === "Blob") {
+							return await response.blob();
+						}
+						
+						if (binaryType === "File") {
+							// Reconstruct as File with metadata
+							const blobData = await response.blob();
+							const fileName = response.headers.get("X-File-Name");
+							const lastModified = response.headers.get("X-File-LastModified");
+							
+							return new File([blobData], fileName ? decodeURIComponent(fileName) : "file", {
+								type: blobData.type,
+								lastModified: lastModified ? parseInt(lastModified) : Date.now()
+							});
+						}
+						
+						if (binaryType === "ArrayBuffer") {
+							return await response.arrayBuffer();
+						}
+						
+						// TypedArray types (Uint8Array, Int32Array, Float64Array, etc.)
+						if (binaryType.endsWith("Array") || binaryType === "DataView") {
+							const arrayBuffer = await response.arrayBuffer();
+							const TypedArrayConstructor = (globalThis as any)[binaryType];
+							
+							if (TypedArrayConstructor) {
+								// Reconstruct the specific TypedArray type
+								return new TypedArrayConstructor(arrayBuffer);
+							}
+							
+							// Fallback to Uint8Array if constructor not found
+							return new Uint8Array(arrayBuffer);
+						}
 					}
 					
-			if (contentType.includes(PotoConstants.appJson)) {
-				const jsonText = await response.text();
-				const result = parseTypedJson(jsonText);
-				return result;
-				} else if (contentType.startsWith("text/")) {
-					return response.text();
-				} else {
-					return response.arrayBuffer();
+					// Return the stream directly for pure binary streaming (no buffering)
+					return response.body as ReadableStream<Uint8Array>;
 				}
+
+					if (contentType.includes(PotoConstants.appJson)) {
+						const jsonText = await response.text();
+						const result = parseTypedJson(jsonText);
+						return result;
+					} else if (contentType.startsWith("text/")) {
+						return response.text();
+			} else {
+				// Handle other binary content types (images, PDFs, etc.)
+				// Check for binary type header to return exact type
+				const binaryType = response.headers.get("X-Binary-Type");
+				
+				if (binaryType === "Blob") {
+					return await response.blob();
+				}
+				
+				if (binaryType === "File") {
+					const blobData = await response.blob();
+					const fileName = response.headers.get("X-File-Name");
+					const lastModified = response.headers.get("X-File-LastModified");
+					
+					return new File([blobData], fileName ? decodeURIComponent(fileName) : "file", {
+						type: blobData.type,
+						lastModified: lastModified ? parseInt(lastModified) : Date.now()
+					});
+				}
+				
+				if (binaryType === "ArrayBuffer") {
+					return await response.arrayBuffer();
+				}
+				
+				// TypedArray types
+				if (binaryType && (binaryType.endsWith("Array") || binaryType === "DataView")) {
+					const arrayBuffer = await response.arrayBuffer();
+					const TypedArrayConstructor = (globalThis as any)[binaryType];
+					
+					if (TypedArrayConstructor) {
+						return new TypedArrayConstructor(arrayBuffer);
+					}
+					
+					return new Uint8Array(arrayBuffer);
+				}
+				
+				// Fallback: return as Blob (common for images, videos, etc.)
+				return await response.blob();
+			}
 				};
 			},
 		}) as T;
@@ -724,10 +805,10 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 	 */
 	private _hasBlob(obj: any, depth: number = 0, maxDepth: number = 10): boolean {
 		if (depth > maxDepth) return false;
-		
+
 		// Always use async for Blobs
 		if (obj instanceof Blob) return true;
-		
+
 		// 🚀 CRITICAL: Check for ArrayBuffer and TypedArrays BEFORE checking generic objects
 		// Otherwise Object.values() will iterate through millions of array elements!
 		if (obj instanceof ArrayBuffer) {
@@ -738,20 +819,20 @@ async login(credentials: { username: string; password: string }): Promise<void> 
 			// In browsers with FileReader, use async for native encoding  
 			return typeof FileReader !== 'undefined';
 		}
-		
+
 		// Skip known non-binary types BEFORE recursion
 		if (obj instanceof Date || obj instanceof RegExp || obj instanceof Map || obj instanceof Set) {
 			return false;
 		}
-		
+
 		if (Array.isArray(obj)) {
 			return obj.some(item => this._hasBlob(item, depth + 1, maxDepth));
 		}
-		
+
 		if (obj && typeof obj === 'object') {
 			return Object.values(obj).some(value => this._hasBlob(value, depth + 1, maxDepth));
 		}
-		
+
 		return false;
 	}
 }

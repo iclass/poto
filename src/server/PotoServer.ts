@@ -203,10 +203,10 @@ export class PotoServer {
 				return new Response("Forbidden", { status: 403 });
 			}
 			
-			const file = Bun.file(resolvedPath);
+			const bunFile = Bun.file(resolvedPath);
 			
 			// SECURITY: Proper file existence check (handles empty files correctly)
-			const exists = await file.exists();
+			const exists = await bunFile.exists();
 			if (!exists) {
 				return new Response("File not found", { status: 404 });
 			}
@@ -214,7 +214,7 @@ export class PotoServer {
 			const contentType = mime.getType(resolvedPath) || "application/octet-stream";
 			
 			// Generate ETag based on file size and last modified time
-			const etag = `"${file.size}-${file.lastModified}"`;
+			const etag = `"${bunFile.size}-${bunFile.lastModified}"`;
 			
 			// PERFORMANCE: Check If-None-Match header for conditional requests
 			// Return 304 Not Modified if ETag matches (saves bandwidth)
@@ -239,7 +239,7 @@ export class PotoServer {
 				"ETag": etag,
 			};
 			
-			return new Response(file, {
+			return new Response(bunFile, {
 				status: 200,
 				headers,
 			});
@@ -590,21 +590,30 @@ export class PotoServer {
 					}
 					console.debug(`<< [${userId}]`, req.method, url.pathname, response.status);
 				}
-				// Always add CORS headers to all responses
-				const newHeaders = new Headers(response.headers);
-				for (const [k, v] of Object.entries(corsHeaders)) {
-					newHeaders.set(k, v);
-				}
+			// Always add CORS headers to all responses
+			const newHeaders = new Headers(response.headers);
+			
+			// Preserve existing Access-Control-Expose-Headers if present
+			const existingExposeHeaders = response.headers.get("Access-Control-Expose-Headers");
+			
+			for (const [k, v] of Object.entries(corsHeaders)) {
+				newHeaders.set(k, v);
+			}
+			
+			// Restore Access-Control-Expose-Headers if it was set (for binary responses)
+			if (existingExposeHeaders) {
+				newHeaders.set("Access-Control-Expose-Headers", existingExposeHeaders);
+			}
 
-				// Session headers are now handled in the createHttpHandler function
+			// Session headers are now handled in the createHttpHandler function
 
-				// clone the response since the headers are immutable
-				response = new Response(response.body, {
-					status: response.status,
-					statusText: response.statusText,
-					headers: newHeaders
-				});
-				return response;
+			// clone the response since the headers are immutable
+			response = new Response(response.body, {
+				status: response.status,
+				statusText: response.statusText,
+				headers: newHeaders
+			});
+			return response;
 			},
 			error(e) {
 				const response = new Response("Internal Server Error", { status: 500 });
@@ -790,7 +799,7 @@ export function createHttpHandler<T extends PotoModule>(
 
 			// *** here we go! Execute within request context for concurrency isolation
 			let result = await requestContextManager.runWithContext(context, async () => {
-				const methodResult = (instance as any)[methodName](...args);
+				const methodResult = (instance as any)[methodName](...args); // <--- THIS IS THE MAGIC
 
 				// If it's an async generator, return it directly without awaiting
 				if (methodResult && typeof methodResult[Symbol.asyncIterator] === 'function') {
@@ -809,15 +818,100 @@ export function createHttpHandler<T extends PotoModule>(
 				});
 			}
 
-			if (result === undefined) {
-				return new Response(null, {
-					status: 204,
-					headers: sessionHeaders
-				});
+		if (result === undefined) {
+			return new Response(null, {
+				status: 204,
+				headers: sessionHeaders
+			});
+		}
+
+		// Check if result is a Blob or File (direct binary response)
+		if (result instanceof Blob) {
+			const blobHeaders = new Headers({
+				"Content-Type": result.type || "application/octet-stream"
+			});
+			
+			// Indicate the original return type for client reconstruction
+			if ('name' in result && result.name) {
+				// It's a File - extract basename from potentially full path
+				const fileResult = result as File;
+				const fileName = path.basename(fileResult.name);
+				blobHeaders.set("X-Binary-Type", "File");
+				blobHeaders.set("X-File-Name", encodeURIComponent(fileName));
+				blobHeaders.set("X-File-LastModified", fileResult.lastModified.toString());
+				// Expose custom headers to client via CORS
+				blobHeaders.set("Access-Control-Expose-Headers", "X-Binary-Type, X-File-Name, X-File-LastModified");
+			} else {
+				// It's a Blob
+				blobHeaders.set("X-Binary-Type", "Blob");
+				// Expose custom headers to client via CORS
+				blobHeaders.set("Access-Control-Expose-Headers", "X-Binary-Type");
 			}
+			
+			// Merge session headers
+			sessionHeaders.forEach((value, key) => {
+				blobHeaders.set(key, value);
+			});
+			
+			return new Response(result, {
+				status: 200,
+				headers: blobHeaders,
+			});
+		}
 
+		// Check if result is ArrayBuffer or TypedArray (direct binary response)
+		if (result instanceof ArrayBuffer) {
+			const binaryHeaders = new Headers({
+				"Content-Type": "application/octet-stream",
+				"X-Binary-Type": "ArrayBuffer",
+				"Content-Length": result.byteLength.toString(),
+				"Access-Control-Expose-Headers": "X-Binary-Type, Content-Length"
+			});
+			
+			// Merge session headers
+			sessionHeaders.forEach((value, key) => {
+				binaryHeaders.set(key, value);
+			});
+			
+			return new Response(result, {
+				status: 200,
+				headers: binaryHeaders,
+			});
+		}
+		
+		// Check if result is a TypedArray (Uint8Array, Int32Array, etc.)
+		if (ArrayBuffer.isView(result)) {
+			const binaryHeaders = new Headers({
+				"Content-Type": "application/octet-stream",
+				"X-Binary-Type": result.constructor.name, // e.g., "Uint8Array", "Int32Array"
+				"Content-Length": result.byteLength.toString(),
+				"Access-Control-Expose-Headers": "X-Binary-Type, Content-Length"
+			});
+			
+			// Merge session headers
+			sessionHeaders.forEach((value, key) => {
+				binaryHeaders.set(key, value);
+			});
+			
+			// Convert TypedArray to proper ArrayBuffer for Response
+			// Handle SharedArrayBuffer by copying to regular ArrayBuffer
+			let buffer: ArrayBuffer;
+			if (result.buffer instanceof ArrayBuffer) {
+				buffer = result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength);
+			} else {
+				// SharedArrayBuffer case - copy to regular ArrayBuffer
+				const tempArray = new Uint8Array(result.byteLength);
+				tempArray.set(new Uint8Array(result.buffer, result.byteOffset, result.byteLength));
+				buffer = tempArray.buffer;
+			}
+			
+			return new Response(buffer, {
+				status: 200,
+				headers: binaryHeaders,
+			});
+		}
 
-			// Check if result is a ReadableStream (generic binary streaming)
+		// Check if result is a ReadableStream (generic binary streaming)
 			if (result instanceof ReadableStream) {
 				// ReadableStream defaults to binary/octet-stream
 				// For structured data streaming, use AsyncGenerator instead (which converts to SSE)
@@ -828,6 +922,8 @@ export function createHttpHandler<T extends PotoModule>(
 					"Cache-Control": "no-cache",
 					"Connection": "keep-alive",
 				});
+
+				// add/overwrite the headers with session headers
 				sessionHeaders.forEach((value, key) => {
 					streamHeaders.set(key, value);
 				});
